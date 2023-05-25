@@ -78,7 +78,7 @@ wire         sop, eop, in_valid, out_ready;
 
 // Detect white areas (illuminated path)
 wire white_detect;
-assign white_detect = red[7] & green[7] & blue[7];
+assign white_detect = red[7] & green[7] & blue[7] & y > 11'd240;
 
 // Find boundary of cursor box
 
@@ -124,13 +124,13 @@ always@(posedge clk) begin
 	if (white_detect & in_valid) begin	//Update bounds when the pixel is white
 		if (x < x_min) x_min <= x;
 		if (x > x_max) x_max <= x;
-		if (y > y_min) y_min <= y;
-		y_max <= 11'd245;
+		if (y < y_min) y_min <= y;
+		y_max <= y;
 	end
 	if (sop & in_valid) begin	//Reset bounds on start of packet
 		x_min <= IMAGE_W-11'h1;
 		x_max <= 0;
-		y_min <= 11'd245;
+		y_min <= IMAGE_H-11'h1;
 		y_max <= 0;
 	end
 end
