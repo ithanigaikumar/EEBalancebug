@@ -4,7 +4,7 @@ import numpy as np
 video = cv2.VideoCapture("maze_view.mp4")
         
           
-vertices = np.array([[0,500],[0,300],[1440,300],[1440,500],
+vertices = np.array([[0,700],[0,200],[1440,200],[1440,700],
                          ], np.int32)  
 
 def roi(img, vertices):
