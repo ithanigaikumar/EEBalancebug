@@ -65,7 +65,7 @@ input                         mode;
 //
 parameter IMAGE_W = 11'd640;
 parameter IMAGE_H = 11'd480;
-parameter MESSAGE_BUF_MAX = 256;
+parameter MESSAGE_BUF_MAX = 256; //increase this here and in MSG_FIFO.V
 parameter MSG_INTERVAL = 6;
 parameter BB_COL_DEFAULT = 24'h00ff00;
 
@@ -205,37 +205,44 @@ wire msg_buf_empty;
 
 `define RED_BOX_MSG_ID "RBB"
 
-// always@(*) begin	//Write words to FIFO as state machine advances. Maybe use this to send more chunks quickly
-// 	case(msg_state)
-// 		2'b00: begin
-// 			msg_buf_in = 32'b0;
-// 			msg_buf_wr = 1'b0;
-// 		end
-// 		2'b01: begin
-// 			msg_buf_in = `RED_BOX_MSG_ID;	//Message ID
-// 			msg_buf_wr = 1'b1;
-// 		end
-// 		2'b10: begin
-// 			msg_buf_in = {3'b0, x_start, y_start, chunk_length, sop};	//Top left coordinate
-// 			msg_buf_wr = 1'b1;
-// 		end
-// 		2'b11: begin
-// 			msg_buf_in = {32'haaaaaaaa}; //Bottom right coordinate
-// 			msg_buf_wr = 1'b1;
-// 		end
-// 	endcase
-// end 
+//things to try out:
+//increase fifo num word size thing
+//always@(posedge send_chunk)
+//make nios2 print w/o red_msg_id thing
+//FSM logic for sending chunks
+//lower framerate
 
-always@(*) begin
-	if(send_chunk & !msg_buf_wr) begin
-		msg_buf_in = {3'b0, x_start, y_start, chunk_length, sop};
-		msg_buf_wr = 1'b1;
-	end
-	else
-		msg_buf_in = 32'b0;
-		msg_buf_wr = 1'b0;
+always@(*) begin	//Write words to FIFO as state machine advances. Maybe use this to send more chunks quickly
+	case(msg_state)
+		2'b00: begin
+			msg_buf_in = 32'b0;
+			msg_buf_wr = 1'b0;
+		end
+		2'b01: begin
+			msg_buf_in = `RED_BOX_MSG_ID;	//Message ID
+			msg_buf_wr = 1'b1;
+		end
+		2'b10: begin
+			msg_buf_in = {3'b0, x_start, y_start, chunk_length, sop};	//Top left coordinate
+			msg_buf_wr = 1'b1;
+		end
+		2'b11: begin
+			msg_buf_in = {3'b0, x_start, y_start, chunk_length, sop}; //Bottom right coordinate
+			msg_buf_wr = 1'b1;
+		end
+	endcase
+end 
 
-end
+// always@(*) begin
+// 	if(send_chunk & !msg_buf_wr) begin
+// 		msg_buf_in = {3'b0, x_start, y_start, chunk_length, sop};
+// 		msg_buf_wr = 1'b1;
+// 	end
+// 	else
+// 		msg_buf_in = 32'b0;
+// 		msg_buf_wr = 1'b0;
+
+// end
 
 
 //Output message FIFO
