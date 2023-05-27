@@ -205,25 +205,36 @@ wire msg_buf_empty;
 
 `define RED_BOX_MSG_ID "RBB"
 
-always@(*) begin	//Write words to FIFO as state machine advances
-	case(msg_state)
-		2'b00: begin
-			msg_buf_in = 32'b0;
-			msg_buf_wr = 1'b0;
-		end
-		2'b01: begin
-			msg_buf_in = `RED_BOX_MSG_ID;	//Message ID
-			msg_buf_wr = 1'b1;
-		end
-		2'b10: begin
-			msg_buf_in = {32'hffffffff};	//Top left coordinate
-			msg_buf_wr = 1'b1;
-		end
-		2'b11: begin
-			msg_buf_in = {32'haaaaaaaa}; //Bottom right coordinate
-			msg_buf_wr = 1'b1;
-		end
-	endcase
+// always@(*) begin	//Write words to FIFO as state machine advances. Maybe use this to send more chunks quickly
+// 	case(msg_state)
+// 		2'b00: begin
+// 			msg_buf_in = 32'b0;
+// 			msg_buf_wr = 1'b0;
+// 		end
+// 		2'b01: begin
+// 			msg_buf_in = `RED_BOX_MSG_ID;	//Message ID
+// 			msg_buf_wr = 1'b1;
+// 		end
+// 		2'b10: begin
+// 			msg_buf_in = {3'b0, x_start, y_start, chunk_length, sop};	//Top left coordinate
+// 			msg_buf_wr = 1'b1;
+// 		end
+// 		2'b11: begin
+// 			msg_buf_in = {32'haaaaaaaa}; //Bottom right coordinate
+// 			msg_buf_wr = 1'b1;
+// 		end
+// 	endcase
+// end 
+
+always@(*) begin
+	if(send_chunk & !msg_buf_wr) begin
+		msg_buf_in = {3'b0, x_start, y_start, chunk_length, sop};
+		msg_buf_wr = 1'b1;
+	end
+	else
+		msg_buf_in = 32'b0;
+		msg_buf_wr = 1'b0;
+
 end
 
 
