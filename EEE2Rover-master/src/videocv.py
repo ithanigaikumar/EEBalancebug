@@ -7,10 +7,9 @@ video = cv2.VideoCapture("maze_view.mp4")
         
 kernel = np.ones((5,5),np.uint8)    
    
-vertices= np.array([[0,400],[0,300],[640,300],[640,400],
+vertices= np.array([[0,450],[0,270],[640,270],[640,450],
                          ], np.int32)  
-   
-forward_mask= np.array([[0,350],[0,300],[640,300],[640,350],
+forward_mask= np.array([[200,350],[200,270],[440,270],[440,350],
                          ], np.int32)  
 left_mask = np.array([[0,480],[0,0],[320,0],[320,480],
                          ], np.int32)  
@@ -151,7 +150,7 @@ class HoughBundler:
 
         return groups
 
-    def merge_line_segments(self, lines):
+    def merge_line_segments(self, lines,):
         # orientation = self.get_orientation(lines[0])
       
         # if(len(lines) == 1):
@@ -173,15 +172,16 @@ class HoughBundler:
       
        return (np.mean(lines, axis=0, dtype=np.int32))
 
-    def process_lines(self, lines,vert):
+    def process_lines(self, lines, align):
         lines_horizontal  = []
         lines_vertical  = []
         if lines is not None:
             
             for line_i in [l[0] for l in lines]:
                 orientation = self.get_orientation(line_i)
+                print(orientation)
                 # if vertical
-                if 45 < orientation <= 90:
+                if 20 < orientation <= 90:
                     lines_vertical.append(line_i)
                 else:
                     lines_horizontal.append(line_i)
@@ -189,11 +189,10 @@ class HoughBundler:
         lines_vertical  = sorted(lines_vertical , key=lambda line: line[1])
         lines_horizontal  = sorted(lines_horizontal , key=lambda line: line[0])
         merged_lines_all = []
-
-        if vert:
-            target_lines=lines_vertical
+        if align == 1:
+            target_lines = lines_vertical
         else:
-            target_lines=lines_horizontal
+            target_lines = lines_horizontal
         # for each cluster in vertical and horizantal lines leave only one line
         for i in [target_lines]:
             if len(i) > 0:
@@ -247,6 +246,43 @@ def draw_lines(lines,frame):
             
             x1, y1, x2, y2 = line
             cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+def descision(walls):
+    if walls==[1,1,0]:
+       return "Right"
+    elif walls==[0,1,1]:
+       return  "Left"
+    elif walls==[1,0,1]:
+     return "Forward"
+    elif walls==[1,1,1]:
+     return "Backtrack"
+    else:
+        return "Undefined"
+def draw_grid(img, grid_shape, color=(0, 255, 0), thickness=1):
+    h, w, _ = img.shape
+    rows, cols = grid_shape
+    dy, dx = h / rows, w / cols
+
+    # draw vertical lines
+    for x in np.linspace(start=dx, stop=w-dx, num=cols-1):
+        x = int(round(x))
+        cv2.line(img, (x, 0), (x, h), color=color, thickness=thickness)
+
+    # draw horizontal lines
+    for y in np.linspace(start=dy, stop=h-dy, num=rows-1):
+        y = int(round(y))
+        cv2.line(img, (0, y), (w, y), color=color, thickness=thickness)
+
+    return img
+
+def closest_to_center(lines):
+    if lines !=[]:
+        closest_line = lines[0]
+        for line in lines:
+            x1, y1, x2, y2 = line
+            x1c, y1c, x2c, y2c = closest_line
+            if abs(320-(x1+x2)/2) <abs(320-(x1c+x2c)/2) :
+                closest_line=line
+    return [closest_line]
 
 while True:
     
@@ -258,27 +294,34 @@ while True:
         continue
     frame = cv2.resize(frame, (640, 480))
    
-  
- 
+
     edges = cv2.Canny(frame, 150, 255)
     edges=roi(edges,[vertices])
     #edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
     masks=[left_mask,forward_mask,right_mask]
     walls=[0,0,0]
+    frame=draw_grid(frame,(2,2))
+    cv2.circle(frame, (320,240), 6, (0,255,0), 1)
     for i in range(0,len(masks)):
         mask=masks[i]
-        lines = cv2.HoughLinesP(roi(edges,[mask]), 1, np.pi/180, threshold=50, minLineLength=20 , maxLineGap=10)
-        bundler = HoughBundler(min_distance=20,min_angle=10)
+        lines = cv2.HoughLinesP(roi(edges,[mask]),2, np.pi/180, threshold=150, minLineLength=20 , maxLineGap=5)
+        bundler = HoughBundler(min_distance=10,min_angle=5)
         lines = bundler.process_lines(lines,(i!=1))
-        if lines != []:
+       
+        if lines !=[]:
             walls[i]=1
-
+            lines=closest_to_center(lines)
         else:
             walls[i]=0
         draw_lines(lines,frame)
     
     __draw_label(frame, 'offset = %d' % -0.1, (20,20), (255,255,255))
     __draw_label(frame, 'walls = [%d , %d, %d]' % tuple(walls), (20,40), (255,255,255))
+    __draw_label(frame, 'descision = %s' % descision(walls), (20,60), (255,255,255))
+    
+    #save frame
+    if count%30==0:
+        cv2.imwrite("frame%d.jpg" % count, frame)
     cv2.imshow("edges", edges)
     cv2.imshow("frame", frame)
     key = cv2.waitKey(25)
