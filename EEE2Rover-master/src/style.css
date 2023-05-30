@@ -1,0 +1,380 @@
+@import url('https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Source+Sans+Pro:ital,wght@0,200;0,300;0,400;0,600;0,700;0,900;1,200;1,300;1,400;1,600;1,700;1,900&display=swap');
+h1 {
+    text-align: center;
+    text-shadow: 2px 2px 5px rgba(41, 41, 41, 0.5);;
+    font-family: 'Source Sans Pro', sans-serif;
+}
+
+h3 {
+    font-family: 'Source Sans Pro', sans-serif;
+    color: #7fffd4;
+}
+
+button {
+    background-color: #2196F3;
+    border-radius: 0.5em;
+    border-color: #1a1a1a;
+    width:80%;
+    height:35%;
+    margin: 1rem 0;
+    border: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: white;
+    font-family: 'Source Sans Pro', sans-serif;
+}
+
+button:hover{
+    background-color: #ccc;
+}
+
+
+body {
+    background-color: #e2e2e2;
+    font-family: 'Source Sans Pro', sans-serif;
+    color: rgb(255, 255, 255);
+    margin: 1em;
+}
+
+p {
+    font-weight: lighter;
+    margin: 1em 1em;
+}
+
+
+
+.centered{
+    position: relative;
+    top: 20%;
+    
+}
+.info-col-sig{
+    height: 50%;
+    object-fit: fill;
+
+}
+.info-title{
+    font-weight: 600;
+    font-size: 1.25rem;
+    padding: 0;
+    height: min-content;
+}
+.info-num{
+    
+    font-size: 2rem;
+    font-weight:900;
+    margin: 1rem 1rem;
+}
+
+.controls {
+
+    position: fixed;
+    bottom:0;
+    width: 100%;
+    align-content: center;
+}
+
+
+
+.left{
+    float: left;
+
+}
+.right{
+    float: right;
+    
+}
+.statuses {
+    display: flex;
+
+    justify-content: space-between;
+    height: 50vh;
+    width: 100%;
+}
+
+.status {
+   
+    text-align: center;
+    width: auto;
+    height: 45vh;
+    border-radius: 0.5rem;
+    background-color: #ffffff;
+    padding: 1rem;
+    box-shadow: 5px 5px 10px rgb(147, 147, 147 ,0.1);
+
+}
+.carrier{
+    font-size:1rem; font-weight:600; color:#E31C79;
+}
+.num{
+    font-weight:600;
+    font-size: 1.5rem; 
+}
+svg{
+    height:auto;
+    margin:0.5rem 1rem;
+    width:65%;
+}
+svg path{
+
+    stroke-width: 7;
+}
+.data-bar {
+    width: 60vw;
+    
+}
+.data-cols{
+    column-count: 3;
+}
+.scan-bar {
+    width: 12vw;
+}
+.motion-bar{
+    margin: 1rem;
+    height: 30vh;
+    align-items: center;
+    width: 15vw;
+    display: grid;
+    /* touch-action: none; */
+    
+}
+
+
+.status .title {
+    font-family: 'Source Sans Pro', sans-serif;
+    padding: 0.1rem;
+    font-weight: 700;
+    font-size: 1.25rem;
+}
+
+
+.circular{
+    height: 100px;
+    width: 100px;
+    position: relative;
+
+}
+
+.circular .inner {
+    position: absolute;
+    z-index: 6;
+    top: 50%;
+    left: 50%;
+    height: 80px;
+    width: 80px;
+    margin: -40px 0 0 -40px;
+    background: #1a1a1a;
+    border-radius: 100%;
+
+}
+
+.circular .number {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 10;
+    font-size: 18px;
+    font-weight: 500;
+    color: #40e0d0;
+}
+
+.circular .bar {
+    position: absolute;
+    height: 100%;
+    width: 100%;
+    background: #fff;
+    -webkit-border-radius: 100%;
+    clip: rect(0px, 100px, 100px, 50px);
+}
+
+
+
+.circle .bar .progress {
+    position: absolute;
+    height: 100%;
+    width: 100%;
+    -webkit-border-radius: 100%;
+    clip: rect(0px, 50px, 100px, 0px);
+    background: #40e0d0;
+}
+
+.circle .left .progress {
+    z-index: 1;
+    animation: left 4s linear both;
+}
+
+@keyframes left {
+    100% {
+        transform: rotate(180deg);
+    }
+}
+
+.circle .right {
+    transform: rotate(180deg);
+    z-index: 3;
+
+}
+
+.circle .right .progress {
+    animation: right 4s linear both;
+    animation-delay: 4s;
+}
+
+@keyframes right {
+    100% {
+        transform: rotate(180deg);
+    }
+}
+
+/* Stolen code */
+/* The switch - the box around the slider */
+.switch {
+    position: relative;
+    display: inline-block;
+    margin: 1rem 0 ;
+    width: 60px;
+    height: 34px;
+  }
+  
+  /* Hide default HTML checkbox */
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  
+  /* The slider */
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: #ccc;
+    -webkit-transition: .4s;
+    transition: .4s;
+  }
+  
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 26px;
+    width: 26px;
+    left: 4px;
+    bottom: 4px;
+    background-color: white;
+    -webkit-transition: .4s;
+    transition: .4s;
+  }
+  
+  input:checked + .slider {
+    background-color: #2196F3;
+  }
+  
+  input:focus + .slider {
+    box-shadow: 0 0 1px #2196F3;
+  }
+  
+  input:checked + .slider:before {
+    -webkit-transform: translateX(26px);
+    -ms-transform: translateX(26px);
+    transform: translateX(26px);
+  }
+  
+  /* Rounded sliders */
+  .slider.round {
+    border-radius: 34px;
+  }
+  
+  .slider.round:before {
+    border-radius: 50%;
+  }
+  
+
+  .range-slider{
+    height: 100%;
+    /* -webkit-transform: rotate(-90deg);  */
+}
+
+input[type="range"] {
+   width: 100%;
+    -webkit-appearance: slider-vertical;
+    height: 90%;
+    
+   }
+   input[type="range"]::-webkit-slider-runnable-track {
+    -webkit-appearance: none;
+    background: #2196F3;
+    height: 50px;
+        
+   }
+   input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    
+    height: 50px;
+    width: 50px;
+    background: rgb(171, 171, 171);
+    margin-top: -15px;
+    border-radius: 50%;
+    
+   }
+   .video-mask{
+    position: fixed;
+    width: 100vw;
+    height: 100vh;
+    /* border-radius: 1rem; 
+    overflow: hidden;  */
+    object-fit: fill;
+    }
+   
+#videoElement {
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: -1;
+  }
+
+
+  @media (min-aspect-ratio: 16/9) {
+    .iframe {
+      /* height = 100 * (9 / 16) = 56.25 */
+      height: 56.25vw;
+    }
+  }
+      
+  @media (max-aspect-ratio: 16/9) {
+    .iframe {
+      /* width = 100 / (9 / 16) = 177.777777 */
+      width: 177.78vh;
+    }
+  }
+  .acrylic {
+
+    position: relative;
+    background: rgba(41, 41, 41, 0.5);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(30px);
+    box-shadow: 2px 2px 10px rgb(0,0,0,0.6);
+  }
+
+  .mag-ult{
+    width: 12vw;
+  }
+  .rad-ir{
+    width: 12vw;
+  }
+   
+
+.sensors{
+   
+    column-count: 2;
+}
+  
+  
