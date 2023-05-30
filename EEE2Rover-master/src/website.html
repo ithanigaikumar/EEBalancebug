@@ -120,64 +120,16 @@
     var leftSlider = $('#left-slider');
     var rightSlider = $('#right-slider');
 
-    irReq.onreadystatechange = function () {
+    imgReq.onreadystatechange = function () {
         if (this.readyState == 4 && this.status == 200) {
-            document.getElementById("irState").innerHTML = this.responseText;
+            imgBin = this.responseText;
+            //add code for converting image binary to image
             console.log(this.responseText);
         }
     };
-    magReq.onreadystatechange = function () {
-        if (this.readyState == 4 && this.status == 200) {
-            document.getElementById("magState").innerHTML = this.responseText;
-            console.log(this.responseText);
-        }
-    };
-    radioMReq.onreadystatechange = function () {
-        if (this.readyState == 4 && this.status == 200) {
-            document.getElementById("radMState").innerHTML = this.responseText;
-            console.log(this.responseText);
-        }
-    };
-    radioCReq.onreadystatechange = function () {
-        if (this.readyState == 4 && this.status == 200) {
-            document.getElementById("radCState").innerHTML = this.responseText;
-            console.log(this.responseText);
-        } 
-    };
-    usReq.onreadystatechange = function () {
-        if (this.readyState == 4 && this.status == 200) {
-            document.getElementById("usState").innerHTML = this.responseText;
-            console.log(this.responseText);
-        }
-    };
-    motionReq.onreadystatechange = function () {
-        if (motionReq.readyState == 4 && motionReq.status == 200) {
-
-        }
-    };
-
-    identifyReq.onreadystatechange = function () {
-        if (this.readyState == 4 && this.status == 200) {
-            document.getElementById("rockType").innerHTML = this.responseText;
-            console.log(this.responseText);
-        } 
-    };
-
-
-
     function update() {
-        irReq.open("GET", "http://" + ip + "/ir");
-        irReq.send();
-        usReq.open("GET", "http://" + ip + "/us");
-        usReq.send();
-        magReq.open("GET", "http://"+ip+"/mag");
-        magReq.send();
-        radioMReq.open("GET", "http://"+ip+"/radM");
-        radioMReq.send();
-        radioCReq.open("GET", "http://"+ip+"/radC");
-        radioCReq.send();
-        identifyReq.open("GET", "http://" + ip + "/identify");
-        identifyReq.send();
+        imgReq.open("GET", "http://" + ip + "/img");
+        imgReq.send();
     };
 
     function resetRight() {
