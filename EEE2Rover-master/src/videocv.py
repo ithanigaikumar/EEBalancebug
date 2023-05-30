@@ -7,7 +7,7 @@ video = cv2.VideoCapture("maze_view.mp4")
         
 kernel = np.ones((5,5),np.uint8)    
    
-vertices= np.array([[0,450],[0,270],[640,270],[640,450],
+vertices= np.array([[0,480],[0,270],[640,270],[640,480],
                          ], np.int32)  
 forward_mask= np.array([[200,350],[200,270],[440,270],[440,350],
                          ], np.int32)  
@@ -179,9 +179,8 @@ class HoughBundler:
             
             for line_i in [l[0] for l in lines]:
                 orientation = self.get_orientation(line_i)
-                print(orientation)
                 # if vertical
-                if 20 < orientation <= 90:
+                if 25 < orientation <= 90:
                     lines_vertical.append(line_i)
                 else:
                     lines_horizontal.append(line_i)
@@ -243,9 +242,9 @@ def draw_lines(lines,frame):
      if lines is not None:
        # lines = bundler.process_lines(lines)
         for line in lines:
-            
-            x1, y1, x2, y2 = line
-            cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+            if line is not None:
+                x1, y1, x2, y2 = line
+                cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
 def descision(walls):
     if walls==[1,1,0]:
        return "Right"
@@ -283,7 +282,13 @@ def closest_to_center(lines):
             if abs(320-(x1+x2)/2) <abs(320-(x1c+x2c)/2) :
                 closest_line=line
     return [closest_line]
+def GetVanishingPoint(Lines):
+   #find the midpoint of the lines
 
+   x1, y1, x2, y2 = Lines[0]
+   x1c, y1c, x2c, y2c = Lines[1]
+   x=(x1+x2+x1c+x2c)/4
+   return [int(x),240]
 while True:
     
     ret, frame = video.read()
@@ -302,20 +307,31 @@ while True:
     walls=[0,0,0]
     frame=draw_grid(frame,(2,2))
     cv2.circle(frame, (320,240), 6, (0,255,0), 1)
+    line_buffer=[None,None,None]
     for i in range(0,len(masks)):
         mask=masks[i]
-        lines = cv2.HoughLinesP(roi(edges,[mask]),2, np.pi/180, threshold=150, minLineLength=20 , maxLineGap=5)
-        bundler = HoughBundler(min_distance=10,min_angle=5)
+        lines = cv2.HoughLinesP(roi(edges,[mask]),1, np.pi/180, threshold=150, minLineLength=50 , maxLineGap=5)
+
+        bundler = HoughBundler(min_distance=10,min_angle=2)
         lines = bundler.process_lines(lines,(i!=1))
        
         if lines !=[]:
             walls[i]=1
             lines=closest_to_center(lines)
+            line_buffer[i]=lines[0]
         else:
             walls[i]=0
+            if(i==0):
+                lines=[[0,480,0,0]]
+                line_buffer[i]=[0,480,0,0]
+            elif(i==2):
+                lines=[[640,480,640,0]]
+                line_buffer[i]=[640,480,640,0]
         draw_lines(lines,frame)
-    
-    __draw_label(frame, 'offset = %d' % -0.1, (20,20), (255,255,255))
+    offset=(GetVanishingPoint([line_buffer[0],line_buffer[2]]))
+    #print(offset)
+    cv2.circle(frame, tuple(offset), 6, (0,0,255), 5)
+    __draw_label(frame, 'offset = %d' % (offset[0]-320), (20,20), (255,255,255))
     __draw_label(frame, 'walls = [%d , %d, %d]' % tuple(walls), (20,40), (255,255,255))
     __draw_label(frame, 'descision = %s' % descision(walls), (20,60), (255,255,255))
     
