@@ -134,7 +134,7 @@ int main()
   usleep(2000);
   IOWR(MIPI_RESET_N_BASE, 0x00, 0xFF);
 
-  printf("Image Processor ID: %x\n",IORD(0x42000,EEE_IMGPROC_ID));
+  //   printf("Image Processor ID: %x\n",IORD(0x42000,EEE_IMGPROC_ID));
   //printf("Image Processor ID: %x\n",IORD(EEE_IMGPROC_0_BASE,EEE_IMGPROC_ID)); //Don't know why this doesn't work - definition is in system.h in BSP
 
 
@@ -201,22 +201,24 @@ int main()
         	while (1);
         }
 
+	int prevWord;
+
   while(1){
 
        // touch KEY0 to trigger Auto focus
-	   if((IORD(KEY_BASE,0)&0x03) == 0x02){
+	//    if((IORD(KEY_BASE,0)&0x03) == 0x02){
 
-    	   current_focus = Focus_Window(320,240);
-       }
+    // 	   current_focus = Focus_Window(320,240);
+    //    }
 	   // touch KEY1 to ZOOM
-	         if((IORD(KEY_BASE,0)&0x03) == 0x01){
-	      	   if(bin_level == 3 )bin_level = 1;
-	      	   else bin_level ++;
-	      	   printf("set bin level to %d\n",bin_level);
-	      	   MIPI_BIN_LEVEL(bin_level);
-	      	 	usleep(500000);
+	        //  if((IORD(KEY_BASE,0)&0x03) == 0x01){
+	      	//    if(bin_level == 3 )bin_level = 1;
+	      	//    else bin_level ++;
+	      	//    printf("set bin level to %d\n",bin_level);
+	      	//    MIPI_BIN_LEVEL(bin_level);
+	      	//  	usleep(500000);
 
-	         }
+	        //  }
 
 
 	#if 0
@@ -253,58 +255,68 @@ int main()
 	#endif
 
        //Read messages from the image processor and print them on the terminal
-       while ((IORD(0x42000,EEE_IMGPROC_STATUS)>>8) & 0xff) { 	//Find out if there are words to read
-           int word = IORD(0x42000,EEE_IMGPROC_MSG); 			//Get next word from message buffer
-    	   if (fwrite(&word, 4, 1, ser) != 1)
-    		   printf("Error writing to UART");
-           if (word == EEE_IMGPROC_MSG_START)				//Newline on message identifier
-    		   printf("\n");
-    	   printf("%08x ",word);
-       }
+    //    while ((IORD(0x42000,EEE_IMGPROC_STATUS)>>8) & 0xff) { 	//Find out if there are words to read
+    //        int word = IORD(0x42000,EEE_IMGPROC_MSG); 			//Get next word from message buffer
+    // 	   if (fwrite(&word, 4, 1, ser) != 1)
+    // 		   printf("Error writing to UART");
+    //        if (word == EEE_IMGPROC_MSG_START)				//Newline on message identifier
+    // 		   printf("\n");
+    // 	   printf("%08x ",word);
+    //    }
+
+        int word = IORD(0x42000,EEE_IMGPROC_MSG); 			//IDK if the offset should be 1 or 0. start with 1, change to 0 if doesnt work
+
+		if((word!=0) & (word!=prevWord)) {
+			if (fwrite(&word, 4, 1, ser) != 1)
+				printf("Error writing to UART");
+			else
+				prevWord = word;
+		}
+
 
        //Update the bounding box colour
        boundingBoxColour = ((boundingBoxColour + 1) & 0xff);
        IOWR(0x42000, EEE_IMGPROC_BBCOL, (boundingBoxColour << 8) | (0xff - boundingBoxColour));
 
        //Process input commands
-       int in = getchar();
-       switch (in) {
-       	   case 'e': {
-       		   exposureTime += EXPOSURE_STEP;
-       		   OV8865SetExposure(exposureTime);
-       		   printf("\nExposure = %x ", exposureTime);
-       	   	   break;}
-       	   case 'd': {
-       		   exposureTime -= EXPOSURE_STEP;
-       		   OV8865SetExposure(exposureTime);
-       		   printf("\nExposure = %x ", exposureTime);
-       	   	   break;}
-       	   case 't': {
-       		   gain += GAIN_STEP;
-       		   OV8865SetGain(gain);
-       		   printf("\nGain = %x ", gain);
-       	   	   break;}
-       	   case 'g': {
-       		   gain -= GAIN_STEP;
-       		   OV8865SetGain(gain);
-       		   printf("\nGain = %x ", gain);
-       	   	   break;}
-       	   case 'r': {
-        	   current_focus += manual_focus_step;
-        	   if(current_focus >1023) current_focus = 1023;
-        	   OV8865_FOCUS_Move_to(current_focus);
-        	   printf("\nFocus = %x ",current_focus);
-       	   	   break;}
-       	   case 'f': {
-        	   if(current_focus > manual_focus_step) current_focus -= manual_focus_step;
-        	   OV8865_FOCUS_Move_to(current_focus);
-        	   printf("\nFocus = %x ",current_focus);
-       	   	   break;}
-       }
+    //    int in = getchar();
+    //    switch (in) {
+    //    	   case 'e': {
+    //    		   exposureTime += EXPOSURE_STEP;
+    //    		   OV8865SetExposure(exposureTime);
+    //    		   printf("\nExposure = %x ", exposureTime);
+    //    	   	   break;}
+    //    	   case 'd': {
+    //    		   exposureTime -= EXPOSURE_STEP;
+    //    		   OV8865SetExposure(exposureTime);
+    //    		   printf("\nExposure = %x ", exposureTime);
+    //    	   	   break;}
+    //    	   case 't': {
+    //    		   gain += GAIN_STEP;
+    //    		   OV8865SetGain(gain);
+    //    		   printf("\nGain = %x ", gain);
+    //    	   	   break;}
+    //    	   case 'g': {
+    //    		   gain -= GAIN_STEP;
+    //    		   OV8865SetGain(gain);
+    //    		   printf("\nGain = %x ", gain);
+    //    	   	   break;}
+    //    	   case 'r': {
+    //     	   current_focus += manual_focus_step;
+    //     	   if(current_focus >1023) current_focus = 1023;
+    //     	   OV8865_FOCUS_Move_to(current_focus);
+    //     	   printf("\nFocus = %x ",current_focus);
+    //    	   	   break;}
+    //    	   case 'f': {
+    //     	   if(current_focus > manual_focus_step) current_focus -= manual_focus_step;
+    //     	   OV8865_FOCUS_Move_to(current_focus);
+    //     	   printf("\nFocus = %x ",current_focus);
+    //    	   	   break;}
+    //    }
 
 
 	   //Main loop delay
-	   usleep(10000);
+	   usleep(50);
 
    };
   return 0;

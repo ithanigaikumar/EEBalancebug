@@ -125,8 +125,10 @@ reg [12:0] chunk_length;
 reg [7:0] y_start;
 reg in_chunk, send_chunk; //to keep track if current pixel under evaluation at current clk posedge is within chunk
 reg [31:0] chunk_buffer [255:0];
-reg [7:0] chunk_buffer_occupancy; //tells nios how many chunks to read from the buffer to obtain one frame
+reg [7:0] chunks_to_send, chunk_buffer_occupancy; //tells nios how many chunks to read from the buffer to obtain one frame
 reg sample;
+reg send_buffer;
+initial send_buffer = 0;
 
 //frame counter
 reg [2:0] frame_counter;
@@ -168,6 +170,27 @@ always@(posedge clk) begin
 			end
 			chunk_buffer_occupancy <= chunk_buffer_occupancy + 8'h1;
 		end
+		else if(eop & (chunk_buffer_occupancy > 8'h0) & in_valid) begin
+			send_buffer <= 1'b1;
+			chunks_to_send <= chunk_buffer_occupancy;
+		end
+	end
+end
+
+//need nios to read values at a higher frequency than the frequency at which chunks are sent (timescaler) 
+//and also need timescaler to send everything at a higher frequency than the effective fps=60/5-12
+
+reg [12:0] timescaler;
+reg [7:0] chunks_sent;
+initial timescaler = 13'b0;
+initial chunks_sent = 8'b0;
+always@(posedge clk) begin
+	timescaler <= timescaler + 13'b1;
+	if((timescaler == 13'd5000) & send_buffer & (chunks_to_send > 8'b0)) begin
+		s_readdata <= chunk_buffer[chunks_sent];
+		chunks_sent <= chunks_sent + 8'b1;
+		chunks_to_send <= chunks_to_send - 8'b1;
+		timescaler <= 13'b0;
 	end
 end
 
@@ -339,12 +362,12 @@ begin
 		read_d <= 1'b0;
 	end
 	
-	else if (s_chipselect & s_read) begin
-		if   (s_address == `REG_STATUS) s_readdata <= {16'b0,msg_buf_size,reg_status};
-		if   (s_address == `READ_MSG) s_readdata <= {msg_buf_out};
-		if   (s_address == `READ_ID) s_readdata <= 32'h1234EEE2;
-		if   (s_address == `REG_BBCOL) s_readdata <= {8'h0, bb_col};
-	end
+	// else if (s_chipselect & s_read) begin
+	// 	if   (s_address == `REG_STATUS) s_readdata <= {16'b0,msg_buf_size,reg_status};
+	// 	if   (s_address == `READ_MSG) s_readdata <= {msg_buf_out};
+	// 	if   (s_address == `READ_ID) s_readdata <= 32'h1234EEE2;
+	// 	if   (s_address == `REG_BBCOL) s_readdata <= {8'h0, bb_col};
+	// end
 	
 	read_d <= s_read;
 end
