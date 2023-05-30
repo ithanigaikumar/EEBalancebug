@@ -305,8 +305,8 @@ while True:
     #edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
     masks=[left_mask,forward_mask,right_mask]
     walls=[0,0,0]
-    frame=draw_grid(frame,(2,2))
-    cv2.circle(frame, (320,240), 6, (0,255,0), 1)
+    #frame=draw_grid(frame,(2,2))
+    #cv2.circle(frame, (320,240), 6, (0,255,0), 1)
     line_buffer=[None,None,None]
     for i in range(0,len(masks)):
         mask=masks[i]
@@ -330,13 +330,13 @@ while True:
         draw_lines(lines,frame)
     offset=(GetVanishingPoint([line_buffer[0],line_buffer[2]]))
     #print(offset)
-    cv2.circle(frame, tuple(offset), 6, (0,0,255), 5)
+    #cv2.circle(frame, tuple(offset), 6, (0,0,255), 5)
     __draw_label(frame, 'offset = %d' % (offset[0]-320), (20,20), (255,255,255))
     __draw_label(frame, 'walls = [%d , %d, %d]' % tuple(walls), (20,40), (255,255,255))
     __draw_label(frame, 'descision = %s' % descision(walls), (20,60), (255,255,255))
     
     #save frame
-    if count%30==0:
+    if count%15==0:
         cv2.imwrite("frame%d.jpg" % count, frame)
     cv2.imshow("edges", edges)
     cv2.imshow("frame", frame)
