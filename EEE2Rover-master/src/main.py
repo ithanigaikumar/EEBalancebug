@@ -3,7 +3,6 @@ import numpy as np
 import math
 import calibration_utils
 import perspective_utils
-import cv
 import cv_utils as cvu
 video = cv2.VideoCapture("maze_view.mp4")
         

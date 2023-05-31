@@ -12,10 +12,13 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.8.0/dist/chart.min.js"></script>
 
 
+    <script src="libraries/p5.min.js"></script>
+    <script src="libraries/p5.sound.min.js"></script>
 </head>
 
 <body>
-
+    <script id="map" src="sketch.js"></script>
+    <script src="OpenSimplexNoise.js"></script>
     <!-- <img src="frame0.jpg" id="videoElement"><img> -->
     <!-- <iframe src="http://192.168.43.1:4747/video" id="videoElement" ></iframe> -->
 
@@ -30,13 +33,7 @@
             <button onclick="update()">RESET</button>
         
         </div>
-      
-
-
-
         <div class="status acrylic mag-ult ">
-
-
             <div class="info-col-sig">
                 <div class="centered">
                     <div class="info-title">📍 Position</div>
@@ -58,5 +55,9 @@
     <div class="status img-box acrylic">
         <img id="camera-out" src="/frame0.jpg">
     </div>
+
+  
+  
+   
 </body>
 </html>
