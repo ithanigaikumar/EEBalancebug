@@ -15,8 +15,8 @@
 </head>
 
 <body>
-    
-    <img src="frame0.jpg" id="videoElement"><img>
+
+    <!-- <img src="frame0.jpg" id="videoElement"><img> -->
     <!-- <iframe src="http://192.168.43.1:4747/video" id="videoElement" ></iframe> -->
 
     <h1>EEMAP</h1>
@@ -28,17 +28,19 @@
             <button onclick="update()">START</button>
             <hr>
             <button onclick="update()">RESET</button>
-            
-        </div>
-        <div></div>
         
+        </div>
+      
+
+
+
         <div class="status acrylic mag-ult ">
 
 
             <div class="info-col-sig">
                 <div class="centered">
                     <div class="info-title">📍 Position</div>
-                    <div class="info-num" id="magState">None</div>
+                    <div class="info-num" id="magState">(0,0)</div>
                     <div class="info-units"> Cartesian </div>
                 </div>
             </div>
@@ -46,126 +48,15 @@
             <div class="info-col-sig">
                 <div class="centered">
                     <div class="info-title">🧭 Orientation</div>
-                    <div class="info-num" id="usState">None</div>
+                    <div class="info-num" id="usState">0</div>
                     <div class="info-units"> Degrees </div>
                 </div>
 
             </div>
-
-
-
-
-        </div></div>
-       
+        </div>
     </div>
-  
-
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
-
+    <div class="status img-box acrylic">
+        <img id="camera-out" src="/frame0.jpg">
+    </div>
 </body>
-
-<script>
-    ////ip for eerover
-    // var ip="192.168.0.6";
-    //// ip for damanis hotspot
-    const ip = "192.168.43.6"
-    //const ip = "172.20.10.6";
-    
-    var video = document.querySelector("#videoElement");
-    navigator.mediaDevices.enumerateDevices()
-.then(function(devices) {
- // devices.forEach(function(device) {
-   // console.log(device.kind + ": " + device.label +
-     //           " id = " + device.deviceId);
-  //});
-}).catch(function(err) {
-   // console.log(err.name + ": " + err.message);
-  });
-    if (navigator.mediaDevices.getUserMedia) {
-        navigator.mediaDevices.getUserMedia({
-                video: {
-                    deviceId: { exact: "4d00f14a42202dbf8ee184494350fb6b4886ac0ecd64e9383bf297efafa1f31c"}
-                }
-            })
-            .then(function (stream) {
-                video.srcObject = stream;
-            })
-            .catch(function (err0r) {
-                console.log("Something went wrong!");
-            });
-    }
-    var identifyReq = new XMLHttpRequest();
-    var motionReq = new XMLHttpRequest();
-    var irReq = new XMLHttpRequest();
-    var radioMReq = new XMLHttpRequest();
-    var radioCReq = new XMLHttpRequest();
-    var magReq = new XMLHttpRequest();
-    var usReq = new XMLHttpRequest();
-    
-  
-
-    var leftSlider = $('#left-slider');
-    var rightSlider = $('#right-slider');
-
-    imgReq.onreadystatechange = function () {
-        if (this.readyState == 4 && this.status == 200) {
-            imgBin = this.responseText;
-            //add code for converting image binary to image
-            console.log(this.responseText);
-        }
-    };
-    function update() {
-        imgReq.open("GET", "http://" + ip + "/img");
-        imgReq.send();
-    };
-
-    function resetRight() {
-
-        document.getElementById("right-slider").value = 0;
-        motionReq.open("GET", "http://" + ip + "/motion?left=" + document.getElementById("left-slider").value +
-            "&right=" + document.getElementById("right-slider").value, true);
-        motionReq.send();
-        document.getElementById("right-speed").innerHTML = document.getElementById("right-slider").value ;
-    };
-
-    function resetLeft() {
-
-        document.getElementById("left-slider").value = 0;
-        motionReq.open("GET", "http://" + ip + "/motion?left=" + document.getElementById("left-slider").value +
-            "&right=" + document.getElementById("right-slider").value, true);
-        motionReq.send();
-        
-        document.getElementById("left-speed").innerHTML = document.getElementById("left-slider").value ;
-
-    };
-
-    leftSlider.on('input', function () {
-        motionReq.open("GET", "http://" + ip + "/motion?left=" + this.value + "&right=" + document
-            .getElementById("right-slider").value);
-        motionReq.send();
-        
-        document.getElementById("left-speed").innerHTML = this.value;
-    });
-    rightSlider.on('input', function () {
-        motionReq.open("GET", "http://" + ip + "/motion?left=" + document.getElementById("left-slider").value +
-            "&right=" + this.value);
-        motionReq.send();
-        
-        document.getElementById("right-speed").innerHTML = this.value;
-    });
-</script>
-
 </html>

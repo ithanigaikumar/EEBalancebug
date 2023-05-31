@@ -30,7 +30,7 @@ button:hover{
 
 
 body {
-    background-color: #e2e2e2;
+    background-color: #161616;
     font-family: 'Source Sans Pro', sans-serif;
     color: rgb(255, 255, 255);
     margin: 1em;
@@ -204,6 +204,21 @@ svg path{
     animation: left 4s linear both;
 }
 
+.img-box {
+    align-content: center;
+    height: 30vh;
+    width: fit-content;
+    float: left;
+    border-radius: 0.5rem;
+    background-color: #ffffff;
+    padding: 1rem;
+    box-shadow: 5px 5px 10px rgb(147, 147, 147 ,0.1);
+}
+.img-box img{
+    width: auto;
+    height: 100%;
+    
+}
 @keyframes left {
     100% {
         transform: rotate(180deg);
@@ -341,7 +356,18 @@ input[type="range"] {
     z-index: -1;
   }
 
-
+  .canvas {
+    width: 100vw;
+    height: 100vh;
+    object-fit: cover;
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: -1;
+  }
+  
   @media (min-aspect-ratio: 16/9) {
     .iframe {
       /* height = 100 * (9 / 16) = 56.25 */
