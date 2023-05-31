@@ -120,6 +120,8 @@ end
 
 //frame counter
 reg [2:0] frame_counter;
+reg sample;
+initial sample = 1'b0;
 initial frame_counter = 3'd0;
 always@(posedge clk) begin
 	if (eop & in_valid & packet_video) begin  //Ignore non-video packets
@@ -142,31 +144,54 @@ reg in_chunk; //to keep track if current pixel under evaluation at current clk p
 //reg new_frame; set equal to SOP when writing to buffer
 
 always@(posedge clk) begin
-	msg_buf_wr <= 1'b0
-	if(sample) begin
-		if(white_detect & (!in_chunk) & in_valid) begin 
-			x_start <= x;
-			y_start <= y;
-			in_chunk <= 1'b1;
-			chunk_length <= 1;
-		end
-		else if(white_detect & in_chunk & in_valid) begin
-			chunk_length <= chunk_length + 1;
-		end
-		else if((!white_detect) & in_chunk & in_valid) begin
-			in_chunk <= 0;
-			msg_buf_in <= {sop, x_start, y_start, chunk_length};
-			msg_buf_wr <= 1;
-		end
-		if(eop & in_valid & packet_video) begin
-			x_start <= 0;
-			y_start <= 0;
-			in_chunk <= 0;
-			chunk_length <= 0;
+	msg_buf_wr <= 1'b0;
+	if(sop & in_valid) begin
+		if(sample) begin
+			if(white_detect & (!in_chunk) & in_valid) begin 
+				x_start <= x;
+				y_start <= y;
+				in_chunk <= 1'b1;
+				chunk_length <= 1;
+			end
+			else if(white_detect & in_chunk & in_valid) begin
+				chunk_length <= chunk_length + 1;
+			end
+			else if((!white_detect) & in_chunk & in_valid) begin
+				in_chunk <= 0;
+				msg_buf_in <= {1'b1, x_start, y_start, chunk_length};
+				msg_buf_wr <= 1;
+			end
+			if(eop & in_valid & packet_video) begin
+				x_start <= 0;
+				y_start <= 0;
+				in_chunk <= 0;
+				chunk_length <= 0;
+			end
 		end
 	end
-	else begin
-
+	else if(in_valid) begin
+		if(sample) begin
+			if(white_detect & (!in_chunk) & in_valid) begin 
+				x_start <= x;
+				y_start <= y;
+				in_chunk <= 1'b1;
+				chunk_length <= 1;
+			end
+			else if(white_detect & in_chunk & in_valid) begin
+				chunk_length <= chunk_length + 1;
+			end
+			else if((!white_detect) & in_chunk & in_valid) begin
+				in_chunk <= 0;
+				msg_buf_in <= {1'b0, x_start, y_start, chunk_length};
+				msg_buf_wr <= 1;
+			end
+			if(eop & in_valid & packet_video) begin
+				x_start <= 0;
+				y_start <= 0;
+				in_chunk <= 0;
+				chunk_length <= 0;
+			end
+		end
 	end
 end
 
