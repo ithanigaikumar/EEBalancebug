@@ -12,14 +12,11 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.8.0/dist/chart.min.js"></script>
 
 
-    <script src="libraries/p5.min.js"></script>
-    <script src="libraries/p5.sound.min.js"></script>
 </head>
 
 <body>
-    <script id="canvas map" src="sketch.js"></script>
-    <script src="OpenSimplexNoise.js"></script>
-    <!-- <img src="frame0.jpg" id="videoElement"><img> -->
+    
+    <img src="frame0.jpg" id="videoElement"><img>
     <!-- <iframe src="http://192.168.43.1:4747/video" id="videoElement" ></iframe> -->
 
     <h1>EEMAP</h1>
@@ -31,13 +28,17 @@
             <button onclick="update()">START</button>
             <hr>
             <button onclick="update()">RESET</button>
-        
+            
         </div>
+        <div></div>
+        
         <div class="status acrylic mag-ult ">
+
+
             <div class="info-col-sig">
                 <div class="centered">
                     <div class="info-title">📍 Position</div>
-                    <div class="info-num" id="magState">(0,0)</div>
+                    <div class="info-num" id="magState">None</div>
                     <div class="info-units"> Cartesian </div>
                 </div>
             </div>
@@ -45,21 +46,37 @@
             <div class="info-col-sig">
                 <div class="centered">
                     <div class="info-title">🧭 Orientation</div>
-                    <div class="info-num" id="usState">0</div>
+                    <div class="info-num" id="usState">None</div>
                     <div class="info-units"> Degrees </div>
                 </div>
 
             </div>
-        </div>
-    </div>
-    <div class="status img-box acrylic">
-        <img id="camera-out" src="/frame0.jpg">
-    </div>
 
+
+
+
+        </div></div>
+       
+    </div>
   
-  
-   
+
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
 </body>
+
 <script>
     ////ip for eerover
     // var ip="192.168.0.6";
@@ -113,6 +130,41 @@
         imgReq.open("GET", "http://" + ip + "/img");
         imgReq.send();
     };
+
+    function resetRight() {
+
+        document.getElementById("right-slider").value = 0;
+        motionReq.open("GET", "http://" + ip + "/motion?left=" + document.getElementById("left-slider").value +
+            "&right=" + document.getElementById("right-slider").value, true);
+        motionReq.send();
+        document.getElementById("right-speed").innerHTML = document.getElementById("right-slider").value ;
+    };
+
+    function resetLeft() {
+
+        document.getElementById("left-slider").value = 0;
+        motionReq.open("GET", "http://" + ip + "/motion?left=" + document.getElementById("left-slider").value +
+            "&right=" + document.getElementById("right-slider").value, true);
+        motionReq.send();
+        
+        document.getElementById("left-speed").innerHTML = document.getElementById("left-slider").value ;
+
+    };
+
+    leftSlider.on('input', function () {
+        motionReq.open("GET", "http://" + ip + "/motion?left=" + this.value + "&right=" + document
+            .getElementById("right-slider").value);
+        motionReq.send();
+        
+        document.getElementById("left-speed").innerHTML = this.value;
+    });
+    rightSlider.on('input', function () {
+        motionReq.open("GET", "http://" + ip + "/motion?left=" + document.getElementById("left-slider").value +
+            "&right=" + this.value);
+        motionReq.send();
+        
+        document.getElementById("right-speed").innerHTML = this.value;
+    });
 </script>
 
 </html>
