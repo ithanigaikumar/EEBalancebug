@@ -66,17 +66,6 @@
     //// ip for damanis hotspot
     const ip = "192.168.43.6"
     //const ip = "172.20.10.6";
-    
-    var video = document.querySelector("#videoElement");
-    navigator.mediaDevices.enumerateDevices()
-.then(function(devices) {
- // devices.forEach(function(device) {
-   // console.log(device.kind + ": " + device.label +
-     //           " id = " + device.deviceId);
-  //});
-}).catch(function(err) {
-   // console.log(err.name + ": " + err.message);
-  });
     if (navigator.mediaDevices.getUserMedia) {
         navigator.mediaDevices.getUserMedia({
                 video: {
@@ -90,23 +79,12 @@
                 console.log("Something went wrong!");
             });
     }
-    var identifyReq = new XMLHttpRequest();
-    var motionReq = new XMLHttpRequest();
-    var irReq = new XMLHttpRequest();
-    var radioMReq = new XMLHttpRequest();
-    var radioCReq = new XMLHttpRequest();
-    var magReq = new XMLHttpRequest();
-    var usReq = new XMLHttpRequest();
-    
-  
-
-    var leftSlider = $('#left-slider');
-    var rightSlider = $('#right-slider');
+    var imgReq = new XMLHttpRequest();
 
     imgReq.onreadystatechange = function () {
         if (this.readyState == 4 && this.status == 200) {
             imgBin = this.responseText;
-            console.log(this.responseText);
+            //console.log(this.responseText);
         }
     };
     function update() {
@@ -114,5 +92,4 @@
         imgReq.send();
     };
 </script>
-
 </html>

@@ -356,7 +356,7 @@ input[type="range"] {
     z-index: -1;
   }
 
-  .main {
+main {
     width: 100vw;
     height: 100vh;
     object-fit: cover;
