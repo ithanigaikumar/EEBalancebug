@@ -2,14 +2,16 @@
 #include <ESPAsyncWebServer.h>
 #include <WiFi.h>
 #include <HardwareSerial.h>
+#include <LinkedList.h>
 
 const char* ssid = "6gfL Hyperoptic 1Gb Fibre 2.4Ghz";
-const char* password = "ftC0nV2Ux3t";
+const char* password = "";
 AsyncWebServer server(80);
 
 HardwareSerial SerialPort(0);
 
-String hexData = "";
+LinkedList<String> frameQueue = LinkedList<String>();
+String tempData = "";
 
 void setup() {
   Serial.begin(115200);
@@ -23,7 +25,13 @@ void setup() {
   Serial.println(WiFi.localIP());
 
   server.on("/img", HTTP_GET, [](AsyncWebServerRequest *request){
-    request->send(200, "text/plain", hexData);
+    if(frameQueue.size() > 0){
+        String frameData = frameQueue.shift(); // get and remove the first frame data
+        request->send(200, "text/plain", frameData);
+    }
+    else{
+        request->send(200, "text/plain", " ");
+    }
   });
   server.begin();
 }
@@ -34,6 +42,19 @@ void loop() {
     SerialPort.readBytes(buffer, 4);
     char hexBuffer[9]; // one extra for null terminator
     sprintf(hexBuffer, "%02X%02X%02X%02X", buffer[0], buffer[1], buffer[2], buffer[3]);
-    hexData = String(hexBuffer);
+    
+    // If MSB of first byte is 1, it's a new frame
+    if (buffer[0] & 0x80) {
+        // If we already have some frame data, store it and start new frame
+        if(tempData.length() > 0){
+            frameQueue.add(tempData); // Add to queue
+            tempData = String(hexBuffer); // start new frame
+        }
+        else {
+            tempData += String(hexBuffer); // first frame
+        }
+    } else {
+        tempData += " " + String(hexBuffer); // add to current frame
+    }
   }
 }
