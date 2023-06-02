@@ -10,10 +10,9 @@
     <script src="jquery-3.6.0.min.js"></script>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@3.8.0/dist/chart.min.js"></script>
-
-
     <script src="libraries/p5.min.js"></script>
     <script src="libraries/p5.sound.min.js"></script>
+    <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
 </head>
 
 <body>
@@ -27,10 +26,12 @@
 
     <div class="statuses">
         <div class="status scan-bar acrylic">
-            <div class="title button">CONTROL</div>
+            <div class="title " style="margin-bottom:0.25em;">CONTROL</div>
             <button onclick="update()">START</button>
             <hr>
             <button onclick="update()">RESET</button>
+            
+            
         
         </div>
         <div class="status acrylic mag-ult ">
@@ -55,12 +56,10 @@
     <div class="status img-box acrylic">
         <img id="camera-out" src="/frame0.jpg">
     </div>
-
-  
-  
    
 </body>
 <script>
+   
     ////ip for eerover
     // var ip="192.168.0.6";
     //// ip for damanis hotspot
@@ -92,4 +91,5 @@
         imgReq.send();
     };
 </script>
+
 </html>

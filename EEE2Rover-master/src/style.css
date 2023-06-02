@@ -10,13 +10,15 @@ h3 {
     color: #7fffd4;
 }
 
+hr{
+    margin: 1.5em 1em;
+}
 button {
     background-color: #2196F3;
     border-radius: 0.5em;
     border-color: #1a1a1a;
-    width:80%;
-    height:35%;
-    margin: 1rem 0;
+    width:90%;
+    height:40%;
     border: 0;
     font-size: 1.25rem;
     font-weight: 600;
@@ -127,6 +129,7 @@ svg path{
     column-count: 3;
 }
 .scan-bar {
+    align-items: center;
     width: 12vw;
 }
 .motion-bar{

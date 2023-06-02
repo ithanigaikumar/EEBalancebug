@@ -1,8 +1,5 @@
 import cv2
 import numpy as np
-import math
-import calibration_utils
-import perspective_utils
 import cv_utils as cvu
 video = cv2.VideoCapture("maze_view.mp4")
         
@@ -21,6 +18,17 @@ count=0
 
 # Specify size on horizontal axis
 
+
+# utility functions because cant have them in seperate files for pyscript
+
+
+
+
+
+
+
+
+#Movement and graph building logic
 def descision(walls):
     if walls==[1,1,0]:
        return "Right"
@@ -33,7 +41,7 @@ def descision(walls):
     else:
         return "Undefined"
 
-
+#Actual computer vision stuff
 while True:
     
     ret, frame = video.read()
@@ -81,8 +89,9 @@ while True:
     cvu.__draw_label(frame, 'descision = %s' % descision(walls), (20,60), (255,255,255))
     
     #save frame
-    if count%15==0:
-        cv2.imwrite("frame%d.jpg" % count, frame)
+    # if count%15==0:
+    #     cv2.imwrite("frame%d.jpg" % count, frame)
+    
     cv2.imshow("edges", edges)
     cv2.imshow("frame", frame)
     key = cv2.waitKey(25)
