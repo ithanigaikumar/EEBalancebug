@@ -86,6 +86,29 @@ void handleMotion(){
   }
 }
 
+void sendImage(imgRLE){
+  HTTPClient server;   
+ 
+   http.begin("http://jsonplaceholder.typicode.com/posts/1");
+   http.addHeader("Content-Type", "text/plain");            
+ 
+   int httpResponseCode = http.PUT(imgRLE);   
+ 
+   if(httpResponseCode>0){
+ 
+    String response = http.getString();   
+ 
+    Serial.println(httpResponseCode);
+    Serial.println(response);          
+ 
+   }else{
+ 
+    Serial.print("Error on sending PUT Request: ");
+    Serial.println(httpResponseCode);
+ 
+   }
+}
+
 void setup()
 {
   Serial.begin(9600);
