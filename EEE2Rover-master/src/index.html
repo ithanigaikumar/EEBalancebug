@@ -63,9 +63,9 @@
     //// ip for damanis hotspot
     const ip = "192.168.43.6"
     //const ip = "172.20.10.6";
-
+    
     var imgReq = new XMLHttpRequest();
-
+    update();
     function processChunks(chunks, width = 640, height = 254) {
         // Create a canvas element
         const canvas = document.createElement('canvas');
@@ -110,20 +110,21 @@
         }
     }
     const chunks = '97c2800316e2a0101662c0171622e01b15c30021158320251523402a14a36030144380351423a03713a3c03c1343e0411324004312e4204512c4404712a460491284804b1264a04d1244c04f1224e0511205005311e5205411c5405511a56058118580591165a05a1145c05c1125e05d1126005e1106205f10e6406110e6606110c6806310a6a0651086c0661086e06610870067106720681067406810691046a068106a06b106a06b106a06b106a06b106a06b108700671067206910467406810474068106a068106a06b106a06b106a06b106a06b106a06b1087006710672069106710672069108606c108806c1088a06d0fe8c06e0fe8e06e0fe9006f0fe9206f0fe9406f0fe9606f0fe9806f0fe9a06f0fc9c0700fe9e06f0fea006f0fea206e0fca406f';
-    setInterval(update(), 1);
+    //setInterval(update(), 1);
     imgReq.onreadystatechange = function () {
         if (this.readyState == 4 && this.status == 200) {
             imgRLE = this.responseText;
             processChunks(imgRLE);
+            imgReq.open("GET", "http://" + ip + "/img");
+            imgReq.send();
         }
     };
-
+    
     function update() {
-       // processChunks(chunks);
-
-        // imgReq.open("GET", "http://" + ip + "/img");
-        //imgReq.send();
+        imgReq.open("GET", "http://" + ip + "/img");
+        imgReq.send();
     };
+    
 </script>
 
 </html>
