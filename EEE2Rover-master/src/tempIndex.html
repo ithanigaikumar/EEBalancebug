@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> EEMAP </title>
+    <link rel="stylesheet" href="style.css">
+    <script src="jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.8.0/dist/chart.min.js"></script>
+    <script src="libraries/p5.min.js"></script>
+    <script src="libraries/p5.sound.min.js"></script>
+    <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
+</head>
+
+<body>
+    <!-- <script id="canvas map" src="sketch.js"></script>
+    <script src="OpenSimplexNoise.js"></script> -->
+    <!-- <img src="frame0.jpg" id="videoElement"><img> -->
+    <!-- <iframe src="http://192.168.43.1:4747/video" id="videoElement" ></iframe> -->
+
+    <h1>EEMAP</h1>
+
+
+    <div class="statuses">
+        <div class="status scan-bar acrylic">
+            <div class="title " style="margin-bottom:0.25em;">CONTROL</div>
+            <button onclick="update()">START</button>
+            <hr>
+            <button onclick="update()">RESET</button>
+
+
+
+        </div>
+        <div class="status acrylic mag-ult ">
+            <div class="info-col-sig">
+                <div class="centered">
+                    <div class="info-title">📍 Position</div>
+                    <div class="info-num" id="magState">(0,0)</div>
+                    <div class="info-units"> Cartesian </div>
+                </div>
+            </div>
+            <hr>
+            <div class="info-col-sig">
+                <div class="centered">
+                    <div class="info-title">🧭 Orientation</div>
+                    <div class="info-num" id="usState">0</div>
+                    <div class="info-units"> Degrees </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    <!-- <div class="status img-box acrylic">
+        <img id="camera-out" src="/frame0.jpg">
+    </div> -->
+    <div class="status img-box acrylic">
+        <canvas id="video-canvas" width="640" height="254"></canvas>
+    </div>
+</body>
+<script>
+    ////ip for eerover
+    // var ip="192.168.0.6";
+    //// ip for damanis hotspot
+    // const ip = "192.168.43.6"
+    //const ip = "172.20.10.6";
+    const ip = "192.168.1.178";
+
+    // var imgReq = new XMLHttpRequest();
+
+    function processChunks(chunks, width = 640, height = 254) {
+    // Get the canvas element
+    const canvas = document.getElementById('video-canvas');
+
+    // Get the canvas 2D context
+    const ctx = canvas.getContext('2d');
+
+    // Initialize an all black image
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, width, height);
+
+    const numChunks = chunks.length / 8;
+    for (let i = 0; i < numChunks; i++) {
+        // Convert hex to binary
+        const chunk = chunks.slice(i * 8, (i * 8) + 8)
+        const binary = parseInt(chunk, 16).toString(2).padStart(32, '0');
+
+        // Unpack the chunk
+        const newFrame = parseInt(binary[0], 2);
+        const xStart = parseInt(binary.slice(1, 11), 2);
+        const yStart = parseInt(binary.slice(11, 19), 2);
+        const chunkLength = parseInt(binary.slice(19), 2);
+
+        // If this chunk starts a new frame, reinitialize the image
+        if (newFrame) {
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, width, height);
+        }
+
+        // Draw the white pixels
+        for (let x = xStart; x < xStart + chunkLength; x++) {
+            // Ensure we're not drawing outside the frame
+            if (x < width && yStart < height) {
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(x, yStart, 1, 1);
+            }
+        }
+    }
+    }
+
+    function update() {
+        const imgReq = new XMLHttpRequest();
+
+        imgReq.onreadystatechange = function () {
+            if (this.readyState == 4 && this.status == 200) {
+                const imgRLE = this.responseText;
+                processChunks(imgRLE);
+            }
+        };
+
+        imgReq.open("GET", "http://" + ip + "/img");
+        imgReq.send();
+    };
+
+    setInterval(update, 200)
+</script>
+
+</html>
