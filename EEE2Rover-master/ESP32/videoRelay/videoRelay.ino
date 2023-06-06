@@ -3,81 +3,62 @@
 #include <WiFi.h>
 #include <HardwareSerial.h>
 
-const char* ssid = "6gfL Hyperoptic 1Gb Fibre 2.4Ghz";
-const char* password = "";
+const char* ssid = "esp32aptestrle";
+const char* password = "wasdqwerty32";
 AsyncWebServer server(80);
+AsyncWebSocket ws("/ws");  // create WebSocket instance
 
 HardwareSerial SerialPort(2);
 
-#define MAX_FRAMES 5000  // maximum number of frames to queue
-String frameBuffer[MAX_FRAMES];  // buffer to hold complete frames
-int front = 0;  // index of first frame
-int rear = -1;  // index of last frame
-int frameCount = 0;  // number of frames in the buffer
-String currentFrame = "";  // currently building frame
-
-void enqueueFrame(String frame) {
-  if (frameCount < MAX_FRAMES) {
-    rear = (rear + 1) % MAX_FRAMES;
-    frameBuffer[rear] = frame;
-    frameCount++;
-  } else {
-    // Buffer is full. Consider handling this situation.
-    Serial.println("Buffer is full");
+void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
+  if(type == WS_EVT_CONNECT){
+    // client connected
+    Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
+  } else if(type == WS_EVT_DISCONNECT){
+    // client disconnected
+    Serial.printf("WebSocket client #%u disconnected\n", client->id());
   }
-}
-
-String dequeueFrame() {
-  if (frameCount > 0) {
-    String frame = frameBuffer[front];
-    front = (front + 1) % MAX_FRAMES;
-    frameCount--;
-    return frame;
-  }
-  return "";  // No data available
 }
 
 void setup() {
   Serial.begin(115200);
   SerialPort.begin(115200, SERIAL_8N1, 16, 17);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(1000);
-    Serial.println("Connecting to WiFi...");
-  }
-  Serial.println(WiFi.localIP());
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(ssid, password);
+  // while (WiFi.status() != WL_CONNECTED) {
+  //   delay(1000);
+  //   Serial.println("Connecting to WiFi...");
+  // }
+  Serial.println(WiFi.softAPIP());
 
-  server.on("/img", HTTP_GET, [](AsyncWebServerRequest *request){
-    if (frameCount > 0) {
-      request->send(200, "text/plain", dequeueFrame());
-    } else {
-      request->send(200, "text/plain", "");
-    }
-  });
+  ws.onEvent(onWsEvent);
+  server.addHandler(&ws);
+
   DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
   server.begin();
 }
 
 void loop() {
-  if(SerialPort.available() > 0){
-    uint8_t buffer[4];
-    SerialPort.readBytes(buffer, 4);
-    char hexBuffer[9]; // one extra for null terminator
-    sprintf(hexBuffer, "%02X%02X%02X%02X", buffer[3], buffer[2], buffer[1], buffer[0]);
+  if(SerialPort.available() >= 2){
+    uint8_t buffer[16];
+    SerialPort.readBytes(buffer, 16);
+    char hexBuffer[33]; // one extra for null terminator
+    sprintf(hexBuffer, "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X", buffer[3], buffer[2], buffer[1], buffer[0], buffer[7], buffer[6], buffer[5], buffer[4], buffer[11], buffer[10], buffer[9], buffer[8], buffer[15], buffer[14], buffer[13], buffer[12]);
     String tempData = String(hexBuffer);
-    
-
-    // If MSB of first byte is 1, it's a new frame
-    if (buffer[3] & 0x80) {
-        // If we already have some frame data, store it in the buffer
-        if(currentFrame.length() > 0){
-            enqueueFrame(currentFrame);
-            
-        }
-        currentFrame = tempData; // start new frame
-    } else {
-        currentFrame += tempData; // add to current frame
-    }
+    ws.textAll(tempData);
   }
+  ws.cleanupClients();
 }
+// void loop() {
+//   if(SerialPort.available() > 0){
+//     uint8_t buffer[16];
+//     for(int i = 0; i < 16; i++){
+//       while(SerialPort.available() == 0){}  // wait for the next byte to arrive
+//       SerialPort.readBytes(buffer, 1);
+//     }
+//     char hexBuffer[33]; // one extra for null terminator
+//     sprintf(hexBuffer, "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X", buffer[3], buffer[2], buffer[1], buffer[0], buffer[7], buffer[6], buffer[5], buffer[4], buffer[11], buffer[10], buffer[9], buffer[8], buffer[15], buffer[14], buffer[13], buffer[12]);
+//     String tempData = String(hexBuffer);
+//     Serial.println(tempData);
+//   }
+// }
