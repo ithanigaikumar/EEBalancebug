@@ -71,43 +71,43 @@
 
     // Get the canvas 2D context
     const ctx = canvas.getContext('2d');
-
-    // Initialize an all black image
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, 640, 240);
-
+    let imgData = ctx.createImageData(640, 240);
+    for (let i = 0; i < imgData.data.length; i += 4) {
+    imgData.data[i + 3] = 255;
+    }
+    
     function processChunks(chunks, width = 640, height = 240) {
-        for (let i = 0; i < 64; i++) {
+        const numChunks = chunks.length / 8;
+        for (let i = 0; i < numChunks; i++) {
             const chunk = chunks.slice(i * 8, (i * 8) + 8);
-            
             const binary = parseInt(chunk, 16).toString(2).padStart(32, '0');
-            
 
-            // Unpack the chunk
-            const newFrame = parseInt(binary.slice(0, 1), 2);      // Take 1 bit
-            let xStart = parseInt(binary.slice(1, 11), 2);       // Take next 10 bits
-            let yStart = parseInt(binary.slice(11, 19), 2);      // Take next 8 bits
-            let chunkLength = parseInt(binary.slice(19, 32), 2); // Take remaining 13 bits
+            const newFrame = parseInt(binary.slice(0, 1), 2);
+            let xStart = parseInt(binary.slice(1, 11), 2);
+            let yStart = parseInt(binary.slice(11, 19), 2);
+            let chunkLength = parseInt(binary.slice(19, 32), 2);
 
-            // If this chunk starts a new frame, reinitialize the image
             if (newFrame) {
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0, 0, width, height);
+                imgData = ctx.createImageData(width, height); // reset imgData
+                for (let i = 0; i < imgData.data.length; i += 4) {
+                imgData.data[i + 3] = 255;
+                }
             }
-            // for (let x = xStart; x < xStart + chunkLength; x++) {
-            //     // Ensure we're not drawing outside the frame
-            //     if (x < width && yStart < height) {
-            //         ctx.fillStyle = '#fff';
-            //         ctx.fillRect(x, yStart, 1, 1);
-            //     }
-            // }
+
             if((xStart + chunkLength) <= width){
-                ctx.fillStyle = '#fff';
-                ctx.fillRect(xStart, yStart, chunkLength, 1);
+                for (let x = xStart; x < xStart + chunkLength; x++) {
+                    let index = (yStart * imgData.width + x) * 4;
+                    imgData.data[index+0] = 255;   // Red: full intensity
+                    imgData.data[index+1] = 255;   // Green: full intensity
+                    imgData.data[index+2] = 255;   // Blue: full intensity
+                    imgData.data[index+3] = 255;   // Alpha: fully opaque
+                }
             }
+
+            // After processing all chunks, update the canvas
+            ctx.putImageData(imgData, 0, 0);
         }
     }
-
     let ws;  // WebSocket connection
 
     function setupWebSocket() {
@@ -127,7 +127,6 @@
         ws.onmessage = (event) => {
             const imgRLE = event.data;
             processChunks(imgRLE);
-            console.log(imgRLE)
         };
     }
 
