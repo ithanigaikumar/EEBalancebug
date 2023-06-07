@@ -9,6 +9,7 @@ AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");  // create WebSocket instance
 
 HardwareSerial SerialPort(2);
+String tempData = "";
 
 void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
   if(type == WS_EVT_CONNECT){
@@ -39,26 +40,15 @@ void setup() {
 }
 
 void loop() {
-  if(SerialPort.available() >= 2){
-    uint8_t buffer[16];
-    SerialPort.readBytes(buffer, 16);
-    char hexBuffer[33]; // one extra for null terminator
-    sprintf(hexBuffer, "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X", buffer[3], buffer[2], buffer[1], buffer[0], buffer[7], buffer[6], buffer[5], buffer[4], buffer[11], buffer[10], buffer[9], buffer[8], buffer[15], buffer[14], buffer[13], buffer[12]);
-    String tempData = String(hexBuffer);
-    ws.textAll(tempData);
+  while(SerialPort.available() >= 4){
+    uint8_t buffer[4];
+    SerialPort.readBytes(buffer, 4);
+    char hexBuffer[9]; // one extra for null terminator
+    sprintf(hexBuffer, "%02X%02X%02X%02X", buffer[3], buffer[2], buffer[1], buffer[0]);
+    tempData += String(hexBuffer);
+    if (tempData.length() == 512) {
+      ws.textAll(tempData);
+      tempData = "";
+    }
   }
-  ws.cleanupClients();
 }
-// void loop() {
-//   if(SerialPort.available() > 0){
-//     uint8_t buffer[16];
-//     for(int i = 0; i < 16; i++){
-//       while(SerialPort.available() == 0){}  // wait for the next byte to arrive
-//       SerialPort.readBytes(buffer, 1);
-//     }
-//     char hexBuffer[33]; // one extra for null terminator
-//     sprintf(hexBuffer, "%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X%02X", buffer[3], buffer[2], buffer[1], buffer[0], buffer[7], buffer[6], buffer[5], buffer[4], buffer[11], buffer[10], buffer[9], buffer[8], buffer[15], buffer[14], buffer[13], buffer[12]);
-//     String tempData = String(hexBuffer);
-//     Serial.println(tempData);
-//   }
-// }
