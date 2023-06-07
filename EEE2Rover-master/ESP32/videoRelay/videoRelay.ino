@@ -45,10 +45,15 @@ void loop() {
     SerialPort.readBytes(buffer, 4);
     char hexBuffer[9]; // one extra for null terminator
     sprintf(hexBuffer, "%02X%02X%02X%02X", buffer[3], buffer[2], buffer[1], buffer[0]);
-    tempData += String(hexBuffer);
-    if (tempData.length() == 512) {
-      ws.textAll(tempData);
-      tempData = "";
+    if(buffer[3] & 0x80){
+      if(tempData.length() > 2){
+        ws.textAll(tempData);
+        tempData = "";
+      }
+      tempData += String(hexBuffer);
+    }
+    else{
+      tempData += String(hexBuffer);
     }
   }
 }
