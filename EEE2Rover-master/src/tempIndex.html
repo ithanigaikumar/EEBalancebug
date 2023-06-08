@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title> EEMAP </title>
+    <link rel="stylesheet" href="style.css">
+    <script src="jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.8.0/dist/chart.min.js"></script>
+    <script src="libraries/p5.min.js"></script>
+    <script src="libraries/p5.sound.min.js"></script>
+    <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
+</head>
+
+<body>
+    <!-- <script id="canvas map" src="sketch.js"></script>
+    <script src="OpenSimplexNoise.js"></script> -->
+    <!-- <img src="frame0.jpg" id="videoElement"><img> -->
+    <!-- <iframe src="http://192.168.43.1:4747/video" id="videoElement" ></iframe> -->
+
+    <h1>EEMAP</h1>
+
+
+    <div class="statuses">
+        <div class="status scan-bar acrylic">
+            <div class="title " style="margin-bottom:0.25em;">CONTROL</div>
+            <button onclick="update()">START</button>
+            <hr>
+            <button onclick="update()">RESET</button>
+
+
+
+        </div>
+        <div class="status acrylic mag-ult ">
+            <div class="info-col-sig">
+                <div class="centered">
+                    <div class="info-title">📍 Position</div>
+                    <div class="info-num" id="magState">(0,0)</div>
+                    <div class="info-units"> Cartesian </div>
+                </div>
+            </div>
+            <hr>
+            <div class="info-col-sig">
+                <div class="centered">
+                    <div class="info-title">🧭 Orientation</div>
+                    <div class="info-num" id="usState">0</div>
+                    <div class="info-units"> Degrees </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    <!-- <div class="status img-box acrylic">
+        <img id="camera-out" src="/frame0.jpg">
+    </div> -->
+    <div class="status img-box acrylic">
+        <canvas id="video-canvas" width="640" height="240"></canvas>
+    </div>
+</body>
+<script>
+    ////ip for eerover
+    // var ip="192.168.0.6";
+    //// ip for damanis hotspot
+    // const ip = "192.168.43.6"
+    //const ip = "172.20.10.6";
+    const ip = "192.168.4.1";
+    // Get the canvas element
+    const canvas = document.getElementById('video-canvas');
+
+    // Get the canvas 2D context
+    const ctx = canvas.getContext('2d');
+    let imgData = ctx.createImageData(640, 240);
+    for (let i = 0; i < imgData.data.length; i += 4) {
+    imgData.data[i + 3] = 255;
+    }
+    
+    function processChunks(chunks, width = 640, height = 240) {
+        const numChunks = chunks.length / 8;
+        for (let i = 0; i < numChunks; i++) {
+            const chunk = chunks.slice(i * 8, (i * 8) + 8);
+            const binary = parseInt(chunk, 16).toString(2).padStart(32, '0');
+
+            const newFrame = parseInt(binary.slice(0, 1), 2);
+            let xStart = parseInt(binary.slice(1, 11), 2);
+            let yStart = parseInt(binary.slice(11, 19), 2);
+            let chunkLength = parseInt(binary.slice(19, 32), 2);
+
+            if (newFrame) {
+                imgData = ctx.createImageData(width, height); // reset imgData
+                for (let i = 0; i < imgData.data.length; i += 4) {
+                imgData.data[i + 3] = 255;
+                }
+            }
+
+            if((xStart + chunkLength) <= width){
+                for (let x = xStart; x < xStart + chunkLength; x++) {
+                    let index = (yStart * imgData.width + x) * 4;
+                    imgData.data[index+0] = 255;   // Red: full intensity
+                    imgData.data[index+1] = 255;   // Green: full intensity
+                    imgData.data[index+2] = 255;   // Blue: full intensity
+                    imgData.data[index+3] = 255;   // Alpha: fully opaque
+                }
+            }
+
+            // After processing all chunks, update the canvas
+            ctx.putImageData(imgData, 0, 0);
+        }
+    }
+    let ws;  // WebSocket connection
+
+    function setupWebSocket() {
+        ws = new WebSocket('ws://' + ip + '/ws');
+
+        ws.onopen = (event) => {
+            console.log('WebSocket is open now.');
+        };
+        ws.onclose = (event) => {
+            console.log('WebSocket is closed now.');
+        };
+
+        ws.onerror = (error) => {
+            console.log('WebSocket error: ', error);
+        };
+
+        ws.onmessage = (event) => {
+            const imgRLE = event.data;
+            processChunks(imgRLE);
+        };
+    }
+
+    // function update() {
+
+    // };
+
+    window.onload = setupWebSocket;
+</script>
+
+</html>
