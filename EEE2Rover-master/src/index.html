@@ -52,78 +52,125 @@
             </div>
         </div>
     </div>
-    <div class="status img-box acrylic">
+    <!-- <div class="status img-box acrylic">
         <img id="camera-out" src="/frame0.jpg">
+    </div> -->
+    <div class="status img-box acrylic">
+        <canvas id="video-canvas" width="640" height="240"></canvas>
     </div>
-
 </body>
 <script>
     ////ip for eerover
     // var ip="192.168.0.6";
     //// ip for damanis hotspot
-    const ip = "192.168.43.6"
+    // const ip = "192.168.43.6"
     //const ip = "172.20.10.6";
+    const ip = "192.168.4.1";
+    // Get the canvas element
+    const canvas = document.getElementById('video-canvas');
 
-    var imgReq = new XMLHttpRequest();
+    // Get the canvas 2D context
+    const ctx = canvas.getContext('2d');
+    let imgData = ctx.createImageData(640, 240);
+    for (let i = 0; i < imgData.data.length; i += 4) {
+    imgData.data[i + 3] = 255;
+    }
 
-    function processChunks(chunks, width = 640, height = 254) {
-        // Create a canvas element
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        document.body.appendChild(canvas);
-        numChunks=chunks.length/8;
+    // // Initialize an all black image
+    // ctx.fillStyle = '#000';
+    // ctx.fillRect(0, 0, 640, 240);
 
-        // Get the canvas 2D context
-        const ctx = canvas.getContext('2d');
+    // function processChunks(chunks, width = 640, height = 240) {
+    //     const numChunks = chunks.length / 8;
+    //     for (let i = 0; i < numChunks; i++) {
+    //         const chunk = chunks.slice(i * 8, (i * 8) + 8);
+            
+    //         const binary = parseInt(chunk, 16).toString(2).padStart(32, '0');
+            
 
-        // Initialize an all black image
-        ctx.fillStyle = '#000';
-        ctx.fillRect(0, 0, width, height);
+    //         // Unpack the chunk
+    //         const newFrame = parseInt(binary.slice(0, 1), 2);      // Take 1 bit
+    //         let xStart = parseInt(binary.slice(1, 11), 2);       // Take next 10 bits
+    //         let yStart = parseInt(binary.slice(11, 19), 2);      // Take next 8 bits
+    //         let chunkLength = parseInt(binary.slice(19, 32), 2); // Take remaining 13 bits
 
-        // Process each chunk
-        for (let i=0;i<numChunks;i+=8) {
-            // Convert hex to binary
-            chunk=chunks.slice(i,i+8)
+    //         // If this chunk starts a new frame, reinitialize the image
+    //         if (newFrame) {
+    //             ctx.fillStyle = '#000';
+    //             ctx.fillRect(0, 0, width, height);
+    //         }
+    //         // for (let x = xStart; x < xStart + chunkLength; x++) {
+    //         //     // Ensure we're not drawing outside the frame
+    //         //     if (x < width && yStart < height) {
+    //         //         ctx.fillStyle = '#fff';
+    //         //         ctx.fillRect(x, yStart, 1, 1);
+    //         //     }
+    //         // }
+    //         if((xStart + chunkLength) <= width){
+    //             ctx.fillStyle = '#fff';
+    //             ctx.fillRect(xStart, yStart, chunkLength, 1);
+    //         }
+    //     }
+    // }
+    function processChunks(chunks, width = 640, height = 240) {
+        const numChunks = chunks.length / 8;
+        for (let i = 0; i < numChunks; i++) {
+            const chunk = chunks.slice(i * 8, (i * 8) + 8);
             const binary = parseInt(chunk, 16).toString(2).padStart(32, '0');
 
-            // Unpack the chunk
-            const newFrame = parseInt(binary[0], 2);
-            const xStart = parseInt(binary.slice(1, 11), 2);
-            const yStart = parseInt(binary.slice(11, 19), 2);
-            const chunkLength = parseInt(binary.slice(19), 2);
+            const newFrame = parseInt(binary.slice(0, 1), 2);
+            let xStart = parseInt(binary.slice(1, 11), 2);
+            let yStart = parseInt(binary.slice(11, 19), 2);
+            let chunkLength = parseInt(binary.slice(19, 32), 2);
 
-            // If this chunk starts a new frame, reinitialize the image
             if (newFrame) {
-                ctx.fillStyle = '#000';
-                ctx.fillRect(0, 0, width, height);
-            }
-
-            // Draw the white pixels
-            for (let x = xStart; x < xStart + chunkLength; x++) {
-                // Ensure we're not drawing outside the frame
-                if (x < width && yStart < height) {
-                    ctx.fillStyle = '#fff';
-                    ctx.fillRect(x, yStart, 1, 1);
+                imgData = ctx.createImageData(width, height); // reset imgData
+                for (let i = 0; i < imgData.data.length; i += 4) {
+                imgData.data[i + 3] = 255;
                 }
             }
+
+            if((xStart + chunkLength) <= width){
+                for (let x = xStart; x < xStart + chunkLength; x++) {
+                    let index = (yStart * imgData.width + x) * 4;
+                    imgData.data[index+0] = 255;   // Red: full intensity
+                    imgData.data[index+1] = 255;   // Green: full intensity
+                    imgData.data[index+2] = 255;   // Blue: full intensity
+                    imgData.data[index+3] = 255;   // Alpha: fully opaque
+                }
+            }
+
+            // After processing all chunks, update the canvas
+            ctx.putImageData(imgData, 0, 0);
         }
     }
-    const chunks = '97c2800316e2a0101662c0171622e01b15c30021158320251523402a14a36030144380351423a03713a3c03c1343e0411324004312e4204512c4404712a460491284804b1264a04d1244c04f1224e0511205005311e5205411c5405511a56058118580591165a05a1145c05c1125e05d1126005e1106205f10e6406110e6606110c6806310a6a0651086c0661086e06610870067106720681067406810691046a068106a06b106a06b106a06b106a06b106a06b108700671067206910467406810474068106a068106a06b106a06b106a06b106a06b106a06b1087006710672069106710672069108606c108806c1088a06d0fe8c06e0fe8e06e0fe9006f0fe9206f0fe9406f0fe9606f0fe9806f0fe9a06f0fc9c0700fe9e06f0fea006f0fea206e0fca406f';
-    setInterval(update(), 1);
-    imgReq.onreadystatechange = function () {
-        if (this.readyState == 4 && this.status == 200) {
-            imgRLE = this.responseText;
+    let ws;  // WebSocket connection
+
+    function setupWebSocket() {
+        ws = new WebSocket('ws://' + ip + '/ws');
+
+        ws.onopen = (event) => {
+            console.log('WebSocket is open now.');
+        };
+        ws.onclose = (event) => {
+            console.log('WebSocket is closed now.');
+        };
+
+        ws.onerror = (error) => {
+            console.log('WebSocket error: ', error);
+        };
+
+        ws.onmessage = (event) => {
+            const imgRLE = event.data;
             processChunks(imgRLE);
-        }
-    };
+        };
+    }
 
-    function update() {
-       // processChunks(chunks);
+    // function update() {
 
-        // imgReq.open("GET", "http://" + ip + "/img");
-        //imgReq.send();
-    };
+    // };
+
+    window.onload = setupWebSocket;
 </script>
 
 </html>
