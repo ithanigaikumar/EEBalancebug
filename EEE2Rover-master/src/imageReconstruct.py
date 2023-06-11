@@ -1,33 +1,45 @@
 from PIL import Image
 
-def process_chunks(chunks, width=640, height=254):
-    # Initialize an all black image
-    frame = Image.new('1', (width, height))
+def process_chunks(chunks, width=640, height=240):
+    num_chunks = len(chunks) // 8
 
-    # Process each chunk
-    for chunk in chunks:
-        # Convert hex to binary
-        binary = format(int(chunk, 16), '032b')
+    # Create a blank image
+    img = np.zeros([height, width, 3], dtype=np.uint8)
+    img.fill(255)  # fill with white
 
-        # Unpack the chunk
-        new_frame = int(binary[0], 2)
+    for i in range(num_chunks - 1, -1, -1):
+        chunk = chunks[i * 8 : (i * 8) + 8]
+        binary = bin(int(chunk, 16))[2:].zfill(32)
+
+        new_frame = int(binary[0:1], 2)
         x_start = int(binary[1:11], 2)
         y_start = int(binary[11:19], 2)
-        chunk_length = int(binary[19:], 2)
+        chunk_length = int(binary[19:32], 2)
 
-        # If this chunk starts a new frame, reinitialize the frame
         if new_frame:
-            frame = Image.new('1', (width, height))
+            img = np.zeros([height, width, 3], dtype=np.uint8)
+            img.fill(255)  # reset to white
 
-        # Draw the white pixels
-        for x in range(x_start, x_start + chunk_length):
-            # Ensure we're not drawing outside the frame
-            if x < width and y_start < height:
-                frame.putpixel((x, y_start), 1)
+        if x_start + chunk_length <= width:
+            for x in range(x_start, x_start + chunk_length):
+                # Set the pixel to black
+                img[y_start, x] = [0, 0, 0]  # RGB
 
-    # Show the final frame
-    frame.show()
+    # Convert numpy array to Image
+    img_pil = Image.fromarray(img)
 
-# Sample chunk data of one frame in hex
+    return img_pil
 
-process_chunks(chunks)
+# Assuming 'img_pil' is your PIL Image object
+img_pil = process_chunks(chunks)
+
+# Convert PIL Image to OpenCV image (numpy array)
+img_cv = np.array(img_pil)
+
+# Convert RGB to BGR 
+img_cv = img_cv[:, :, ::-1].copy() 
+
+# Now you can use 'img_cv' with OpenCV functions
+# cv2.imshow('image', img_cv)
+# cv2.waitKey(0)
+# cv2.destroyAllWindows()
