@@ -1,4 +1,5 @@
 from PIL import Image
+import numpy as np
 
 def process_chunks(chunks, width=640, height=240):
     num_chunks = len(chunks) // 8
