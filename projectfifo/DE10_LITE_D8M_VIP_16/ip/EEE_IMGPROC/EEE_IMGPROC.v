@@ -67,18 +67,82 @@ parameter IMAGE_W = 11'd640;
 parameter IMAGE_H = 11'd480;
 parameter MESSAGE_BUF_MAX = 1024;
 parameter MSG_INTERVAL = 6;
-parameter BB_COL_DEFAULT = 24'h00ff00;
+parameter BB_COL_DEFAULT = 24'h0000ff;
 
 
 wire [7:0]   red, green, blue, grey;
 wire [7:0]   red_out, green_out, blue_out;
 
 wire         sop, eop, in_valid, out_ready;
-////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////// <HSV STUFF> 
+
+reg [31:0] H; //Hue
+reg [15:0] S; //Saturation
+reg [7:0] V;//Value
+reg [16:0] F, E; //Fractional component, Edge constant
+reg [2:0] I; //Sector 0-5
+initial E = 17'd65537;
+
+reg [7:0] Cmax, Cmin, Cmid, delta;
+reg red_detect, yellow_detect, blue_detect;
+initial red_detect = 0;
+initial yellow_detect = 0;
+initial blue_detect = 0;
+
+
+always @(*) begin 
+	Cmax = (red > green) ? ((red > blue) ? red : blue) : ((green > blue) ? green : blue);
+	Cmin = (red < green) ? ((red < blue) ? red : blue) : ((green < blue) ? green : blue);
+	Cmid = (red != Cmax) && (red != Cmin) ? red : (green != Cmax) && (green != Cmin) ? green : blue;
+	V = Cmax;
+	delta = Cmax - Cmin;
+	if (Cmax==red && Cmin==blue) begin
+		I=3'd0;
+	end
+	else if (Cmax==green && Cmin==blue) begin
+		I=3'd1;
+	end
+	else if (Cmax==green && Cmin==red) begin
+		I=3'd2;
+	end
+	else if (Cmax==blue && Cmin==red) begin
+		I=3'd3;
+	end
+	else if (Cmax==blue && Cmin==green) begin
+		I=3'd4;
+	end
+	else if (Cmax==red && Cmin==green) begin
+		I=3'd5;
+	end
+
+	if (delta == 0) begin
+		S = 0;
+		F = 0; // or any other value to indicate that these are undefined in the case delta=0
+	end
+	else begin
+		S = ((delta << 16) - 1) / V;
+		F = (((Cmid - Cmin) << 16) / (delta + 1));
+	end
+
+	if ((I==3'd1) || (I==3'd3) || (I==3'd5)) begin
+		F=E-F;
+	end
+	H=E*I+F;
+	if(y < 11'd240) begin
+		red_detect = (H >= 32'd1 && H <= 32'd27307) && (S > 16'd153) && (V > 8'd128);
+		yellow_detect = (H >= 32'd65537 && H <= 32'd131074) && (S > 16'd102) && (V > 8'd102);
+		blue_detect = (H >= 32'd218568 && H <= 32'd262282) && (S > 16'd2153) && (V > 8'd200);
+	end
+end
+
+
+
+//////////////////////////////////////////////////////////////////////// </HSV STUFF> 
 
 // Detect white areas (illuminated path)
 wire white_detect;
 assign white_detect = red[7] & green[7] & blue[7] & y > 11'd240;
+
 
 // Find boundary of cursor box
 
@@ -89,7 +153,7 @@ assign white_high  =  white_detect ? {8'hff, 8'hff, 8'hff} : {grey, grey, grey};
 
 // Show bounding box
 wire [23:0] new_image;
-wire bb_active;
+wire bb_active;;
 assign bb_active = (x == left) | (x == right) | (y == top) | (y == bottom);
 assign new_image = bb_active ? bb_col : white_high;
 
@@ -119,17 +183,17 @@ always@(posedge clk) begin
 end
 
 //frame counter
-reg [2:0] frame_counter;
+reg [3:0] frame_counter;
 reg sample;
 initial sample = 1'b0;
-initial frame_counter = 3'd0;
+initial frame_counter = 4'd0;
 always@(posedge clk) begin
 	if (eop & in_valid & packet_video) begin  //Ignore non-video packets
 		frame_counter <= frame_counter + 1;
 		
-		if (frame_counter == 3'd7) begin
+		if (frame_counter == 4'd8) begin
 			sample <= 1'b1;
-			frame_counter <= 3'd0;
+			frame_counter <= 4'd0;
 		end
 		else sample <= 1'b0;
 	end
@@ -149,7 +213,19 @@ always@(posedge clk) begin
 	if(sop) begin
 		new_frame <= 1;
 		if(sample) begin
-			if(white_detect & (!in_chunk) & in_valid) begin 
+			if(white_detect & in_chunk & (x==IMAGE_W-1) & in_valid) begin //edge case: looking to encode chunks in the same row only
+				in_chunk <= 0;
+				if(new_frame) begin
+					msg_buf_in <= {1'b1, x_start, y_start, chunk_length};
+					msg_buf_wr <= 1;
+					new_frame <= 0;
+				end
+				else begin
+					msg_buf_in <= {1'b0, x_start, y_start, chunk_length};
+					msg_buf_wr <= 1;
+				end
+			end
+			else if(white_detect & (!in_chunk) & in_valid) begin 
 				x_start <= x;
 				y_start <= y;
 				in_chunk <= 1'b1;
@@ -214,7 +290,7 @@ end
 //Find first and last white pixels
 reg [10:0] x_min, y_min, x_max, y_max;
 always@(posedge clk) begin
-	if (white_detect & in_valid) begin	//Update bounds when the pixel is white
+	if (blue_detect & in_valid) begin	//Update bounds when the pixel is white
 		if (x < x_min) x_min <= x;
 		if (x > x_max) x_max <= x;
 		if (y < y_min) y_min <= y;

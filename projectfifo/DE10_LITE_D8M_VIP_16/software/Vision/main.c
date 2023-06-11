@@ -7,6 +7,7 @@
 #include "mipi_bridge_config.h"
 
 #include "auto_focus.h"
+#include <stdint.h>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -57,7 +58,7 @@ void mipi_clear_error(void){
 
 void mipi_show_error_info(void){
 
-	alt_u16 PHY_status, SCI_status, MDLSynErr, FrmErrCnt, MDLErrCnt;
+	uint16_t PHY_status, SCI_status, MDLSynErr, FrmErrCnt, MDLErrCnt;
 
 	PHY_status = MipiBridgeRegRead(MIPI_REG_PHYSta);
 	SCI_status = MipiBridgeRegRead(MIPI_REG_CSIStatus);
@@ -161,8 +162,8 @@ int main()
 
 #if 0  // focus sweep
 	    printf("\nFocus sweep\n");
- 	 	alt_u16 ii= 350;
- 	    alt_u8  dir = 0;
+ 	 	uint16_t ii= 350;
+ 	    uint8_t  dir = 0;
  	 	while(1){
  	 		if(ii< 50) dir = 1;
  	 		else if (ii> 1000) dir =0;
@@ -182,12 +183,14 @@ int main()
 
 
     //////////////////////////////////////////////////////////
-        alt_u16 bin_level = DEFAULT_LEVEL;
-        alt_u8  manual_focus_step = 10;
-        alt_u16  current_focus = 300;
+        uint16_t bin_level = DEFAULT_LEVEL;
+        uint8_t  manual_focus_step = 10;
+        uint16_t  current_focus = 300;
     	int boundingBoxColour = 0;
-    	alt_u32 exposureTime = EXPOSURE_INIT;
-    	alt_u16 gain = GAIN_INIT;
+    	uint32_t exposureTime = EXPOSURE_INIT;
+    	uint16_t gain = GAIN_INIT;
+    	uint8_t chunksInFrame = 0;
+    	int currentFrame[250];
 
         OV8865SetExposure(exposureTime);
         OV8865SetGain(gain);
@@ -202,109 +205,30 @@ int main()
         }
 
   while(1){
-
-       // touch KEY0 to trigger Auto focus
-	   if((IORD(KEY_BASE,0)&0x03) == 0x02){
-
-    	   current_focus = Focus_Window(320,240);
-       }
-	   // touch KEY1 to ZOOM
-	         if((IORD(KEY_BASE,0)&0x03) == 0x01){
-	      	   if(bin_level == 3 )bin_level = 1;
-	      	   else bin_level ++;
-	      	   printf("set bin level to %d\n",bin_level);
-	      	   MIPI_BIN_LEVEL(bin_level);
-	      	 	usleep(500000);
-
-	         }
-
-
-	#if 0
-       if((IORD(KEY_BASE,0)&0x0F) == 0x0E){
-
-    	   current_focus = Focus_Window(320,240);
-       }
-
-       // touch KEY1 to trigger Manual focus  - step
-       if((IORD(KEY_BASE,0)&0x0F) == 0x0D){
-
-    	   if(current_focus > manual_focus_step) current_focus -= manual_focus_step;
-    	   else current_focus = 0;
-    	   OV8865_FOCUS_Move_to(current_focus);
-
-       }
-
-       // touch KEY2 to trigger Manual focus  + step
-       if((IORD(KEY_BASE,0)&0x0F) == 0x0B){
-    	   current_focus += manual_focus_step;
-    	   if(current_focus >1023) current_focus = 1023;
-    	   OV8865_FOCUS_Move_to(current_focus);
-       }
-
-       // touch KEY3 to ZOOM
-       if((IORD(KEY_BASE,0)&0x0F) == 0x07){
-    	   if(bin_level == 3 )bin_level = 1;
-    	   else bin_level ++;
-    	   printf("set bin level to %d\n",bin_level);
-    	   MIPI_BIN_LEVEL(bin_level);
-    	 	usleep(500000);
-
-       }
-	#endif
-
+	   int readySignal = 0;
+	   while(readySignal != 0xEE){
+		   fread(&readySignal, 1, 1, ser);
+	   }
+	   int frameSent = 0;
        //Read messages from the image processor and print them on the terminal
-       while ((IORD(0x42000,EEE_IMGPROC_STATUS)>>8) & 0xff) { 	//Find out if there are words to read
-           int word = IORD(0x42000,EEE_IMGPROC_MSG); 			//Get next word from message buffer
-    	   if (fwrite(&word, 4, 1, ser) != 1)
-    		   printf("Error writing to UART");
-           if (word == EEE_IMGPROC_MSG_START)				//Newline on message identifier
-    		   printf("\n");
-    	   printf("%08x\n",word);
+       while ((IORD(0x42000,EEE_IMGPROC_STATUS)>>8) & 0x3ff) { 	//Find out if there are words to read
+           int word = IORD(0x42000,EEE_IMGPROC_MSG);
+           if(word & 0x80000000){
+               if (chunksInFrame != 0) {
+                   fwrite(&chunksInFrame, 1, 1, ser);
+                   fwrite(currentFrame, 4, chunksInFrame, ser);
+//                   frameSent = 1;
+               }
+               chunksInFrame = 0;
+               frameSent = 1;
+           }
+
+           currentFrame[chunksInFrame++] = word;
+           if(frameSent){
+        	   break;
+           }
        }
 
-       //Update the bounding box colour
-       boundingBoxColour = ((boundingBoxColour + 1) & 0xff);
-       IOWR(0x42000, EEE_IMGPROC_BBCOL, (boundingBoxColour << 8) | (0xff - boundingBoxColour));
-
-       //Process input commands
-       int in = getchar();
-       switch (in) {
-       	   case 'e': {
-       		   exposureTime += EXPOSURE_STEP;
-       		   OV8865SetExposure(exposureTime);
-       		   printf("\nExposure = %x ", exposureTime);
-       	   	   break;}
-       	   case 'd': {
-       		   exposureTime -= EXPOSURE_STEP;
-       		   OV8865SetExposure(exposureTime);
-       		   printf("\nExposure = %x ", exposureTime);
-       	   	   break;}
-       	   case 't': {
-       		   gain += GAIN_STEP;
-       		   OV8865SetGain(gain);
-       		   printf("\nGain = %x ", gain);
-       	   	   break;}
-       	   case 'g': {
-       		   gain -= GAIN_STEP;
-       		   OV8865SetGain(gain);
-       		   printf("\nGain = %x ", gain);
-       	   	   break;}
-       	   case 'r': {
-        	   current_focus += manual_focus_step;
-        	   if(current_focus >1023) current_focus = 1023;
-        	   OV8865_FOCUS_Move_to(current_focus);
-        	   printf("\nFocus = %x ",current_focus);
-       	   	   break;}
-       	   case 'f': {
-        	   if(current_focus > manual_focus_step) current_focus -= manual_focus_step;
-        	   OV8865_FOCUS_Move_to(current_focus);
-        	   printf("\nFocus = %x ",current_focus);
-       	   	   break;}
-       }
-
-
-	   //Main loop delay
-	   usleep(10000);
 
    };
   return 0;
