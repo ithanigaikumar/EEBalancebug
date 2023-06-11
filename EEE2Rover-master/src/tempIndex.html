@@ -12,6 +12,7 @@
     <script src="libraries/p5.min.js"></script>
     <script src="libraries/p5.sound.min.js"></script>
     <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
+    <script async src="https://docs.opencv.org/3.4/opencv.js" type="text/javascript"></script>
 </head>
 
 <body>
@@ -19,7 +20,7 @@
     <script src="OpenSimplexNoise.js"></script> -->
     <!-- <img src="frame0.jpg" id="videoElement"><img> -->
     <!-- <iframe src="http://192.168.43.1:4747/video" id="videoElement" ></iframe> -->
-
+  
     <h1>EEMAP</h1>
 
 
@@ -57,9 +58,12 @@
     </div> -->
     <div class="status img-box acrylic">
         <canvas id="video-canvas" width="640" height="240"></canvas>
+        <canvas id="output-canvas" width="640" height="240"></canvas>
     </div>
 </body>
+
 <script>
+    let cv = window.cv; 
     ////ip for eerover
     // var ip="192.168.0.6";
     //// ip for damanis hotspot
@@ -67,15 +71,31 @@
     //const ip = "172.20.10.6";
     const ip = "192.168.4.1";
     // Get the canvas element
-    const canvas = document.getElementById('video-canvas');
-
-    // Get the canvas 2D context
-    const ctx = canvas.getContext('2d');
-    let imgData = ctx.createImageData(640, 240);
+    let canvas = document.getElementById('video-canvas');
+    const canvasOutput = document.getElementById('output-canvas');
+    let ctx = canvas.getContext('2d');
+    let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     for (let i = 0; i < imgData.data.length; i += 4) {
     imgData.data[i + 3] = 255;
     }
-    
+    function applyCanny(){
+        let src = cv.imread(canvas);
+         // Convert the image to grayscale
+        let gray = new cv.Mat();
+        cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+
+        // Apply the Canny edge detection
+        dst = new cv.Mat();
+        cv.Canny(gray, dst, 50, 150);
+
+        // Render the output image to the canvas
+        cv.imshow(canvasOutput, dst);
+
+        // Clean up
+        src.delete();
+        gray.delete();
+        dst.delete();
+    }
     function processChunks(chunks, width = 640, height = 240) {
         const numChunks = chunks.length / 8;
         for (let i = 0; i < numChunks; i++) {
@@ -106,7 +126,9 @@
 
             // After processing all chunks, update the canvas
             ctx.putImageData(imgData, 0, 0);
+            
         }
+        applyCanny();
     }
     let ws;  // WebSocket connection
 
@@ -127,6 +149,7 @@
         ws.onmessage = (event) => {
             const imgRLE = event.data;
             processChunks(imgRLE);
+            
         };
     }
 

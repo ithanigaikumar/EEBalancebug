@@ -73,7 +73,7 @@
     const ctx = canvas.getContext('2d');
     let imgData = ctx.createImageData(640, 240);
     for (let i = 0; i < imgData.data.length; i += 4) {
-    imgData.data[i + 3] = 255;
+        imgData.data[i + 3] = 255;
     }
 
     // // Initialize an all black image
@@ -84,9 +84,9 @@
     //     const numChunks = chunks.length / 8;
     //     for (let i = 0; i < numChunks; i++) {
     //         const chunk = chunks.slice(i * 8, (i * 8) + 8);
-            
+
     //         const binary = parseInt(chunk, 16).toString(2).padStart(32, '0');
-            
+
 
     //         // Unpack the chunk
     //         const newFrame = parseInt(binary.slice(0, 1), 2);      // Take 1 bit
@@ -114,7 +114,7 @@
     // }
     function processChunks(chunks, width = 640, height = 240) {
         const numChunks = chunks.length / 8;
-        for (let i = 0; i < numChunks; i++) {
+        for (let i = numChunks-1; i > 0; i--) {
             const chunk = chunks.slice(i * 8, (i * 8) + 8);
             const binary = parseInt(chunk, 16).toString(2).padStart(32, '0');
 
@@ -126,17 +126,17 @@
             if (newFrame) {
                 imgData = ctx.createImageData(width, height); // reset imgData
                 for (let i = 0; i < imgData.data.length; i += 4) {
-                imgData.data[i + 3] = 255;
+                    imgData.data[i + 3] = 255;
                 }
             }
 
-            if((xStart + chunkLength) <= width){
+            if ((xStart + chunkLength) <= width) {
                 for (let x = xStart; x < xStart + chunkLength; x++) {
                     let index = (yStart * imgData.width + x) * 4;
-                    imgData.data[index+0] = 255;   // Red: full intensity
-                    imgData.data[index+1] = 255;   // Green: full intensity
-                    imgData.data[index+2] = 255;   // Blue: full intensity
-                    imgData.data[index+3] = 255;   // Alpha: fully opaque
+                    imgData.data[index + 0] = 255; // Red: full intensity
+                    imgData.data[index + 1] = 255; // Green: full intensity
+                    imgData.data[index + 2] = 255; // Blue: full intensity
+                    imgData.data[index + 3] = 255; // Alpha: fully opaque
                 }
             }
 
@@ -144,7 +144,7 @@
             ctx.putImageData(imgData, 0, 0);
         }
     }
-    let ws;  // WebSocket connection
+    let ws; // WebSocket connection
 
     function setupWebSocket() {
         ws = new WebSocket('ws://' + ip + '/ws');
