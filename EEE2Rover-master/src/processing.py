@@ -2,7 +2,8 @@ import cv2
 import numpy as np
 import cv_utils as cvu
 #video = cv2.VideoCapture("maze_view.mp4")
-        
+import dfs_traversal
+  
 kernel = np.ones((5,5),np.uint8)    
    
 vertices= np.array([[0,480],[0,270],[640,270],[640,480],
@@ -110,9 +111,6 @@ def analyseFrame(frame):
     for i in range(0,len(masks)):
         mask=masks[i]
         lines = cv2.HoughLinesP(cvu.roi(edges,[mask]),1, np.pi/180, threshold=150, minLineLength=50 , maxLineGap=5)
-        
-       
-        
         bundler = cvu.HoughBundler(min_distance=10,min_angle=2)
         lines = bundler.process_lines(lines,(i!=1))
        
@@ -139,6 +137,7 @@ def analyseFrame(frame):
     cv2.imshow('Bounding Boxes', filtered_frame)
     cv2.imshow("frame", frame)
     cv2.waitKey(75)
+    return walls
     
 #Actual computer vision stuff
 # while True:
