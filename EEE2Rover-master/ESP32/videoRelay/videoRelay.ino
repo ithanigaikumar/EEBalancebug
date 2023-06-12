@@ -9,7 +9,8 @@ AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");  // create WebSocket instance
 
 HardwareSerial SerialPort(2);
-String tempData = "";
+// String tempData = "";
+String hexBuffer = "";
 
 void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
   if(type == WS_EVT_CONNECT){
@@ -39,21 +40,49 @@ void setup() {
   server.begin();
 }
 
+// void loop() {
+//   while(SerialPort.available() >= 4){
+//     uint8_t buffer[4];
+//     SerialPort.readBytes(buffer, 4);
+//     char hexBuffer[9]; // one extra for null terminator
+//     sprintf(hexBuffer, "%02X%02X%02X%02X", buffer[3], buffer[2], buffer[1], buffer[0]);
+//     if(buffer[3] & 0x80){
+//       // if(tempData.length() > 2){
+//       ws.textAll(tempData);
+//       tempData = "";
+//       //}
+//       tempData += String(hexBuffer);
+//     }
+//     else{
+//       tempData += String(hexBuffer);
+//     }
+//   }
+// }
+
 void loop() {
-  while(SerialPort.available() >= 4){
-    uint8_t buffer[4];
-    SerialPort.readBytes(buffer, 4);
-    char hexBuffer[9]; // one extra for null terminator
-    sprintf(hexBuffer, "%02X%02X%02X%02X", buffer[3], buffer[2], buffer[1], buffer[0]);
-    if(buffer[3] & 0x80){
-      if(tempData.length() > 2){
-        ws.textAll(tempData);
-        tempData = "";
-      }
-      tempData += String(hexBuffer);
-    }
-    else{
-      tempData += String(hexBuffer);
-    }
+  while (SerialPort.available() < 1) { 
+    SerialPort.write(0xEE);
+    delay(10);
   }
+  uint8_t header = SerialPort.read();
+  uint16_t header4x = header * 4;
+  Serial.println(header4x);
+
+
+  // Read the frame based on the header
+  while (SerialPort.available() < (header4x)) { delay(10); }
+  uint8_t buffer[header4x];
+  SerialPort.readBytes(buffer, header4x);
+
+  // Convert the buffer to a hexadecimal string
+  for (int i = header4x-1; i >= 0; i--) {
+    char hex[3];
+    sprintf(hex, "%02X", buffer[i]);
+    hexBuffer += String(hex);
+  }
+  Serial.println(hexBuffer);
+
+  // Send the frame over WebSocket
+  ws.textAll(hexBuffer);
+  hexBuffer = "";
 }

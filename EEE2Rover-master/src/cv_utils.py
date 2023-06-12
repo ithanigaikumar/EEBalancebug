@@ -1,8 +1,8 @@
 import cv2
 import numpy as np
 import math
-import calibration_utils
-import perspective_utils
+# import calibration_utils
+# import perspective_utils
 
 def __draw_label(img, text, pos, bg_color):
    font_face = cv2.FONT_HERSHEY_SIMPLEX
