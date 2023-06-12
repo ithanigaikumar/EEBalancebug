@@ -40,9 +40,63 @@ def descision(walls):
      return "Backtrack"
     else:
         return "Undefined"
+def filterHSV(frame):
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+      
+    # Threshold of blue in HSV space
+    lower_blue = np.array([20, 50, 140])
+    upper_blue = np.array([180, 255, 255])
+  
+    # preparing the mask to overlay
+    mask = cv2.inRange(hsv, lower_blue, upper_blue)
+      
+    # The black region in the mask has the value of 0,
+    # so when multiplied with original image removes all non-blue regions
+    result = cv2.bitwise_and(frame, frame, mask = mask)
+    return result
+    
+def calculate_height(y1, y2, pixel_to_cm):
+# Assuming the height of the camera is known, convert pixel height to centimeters
+    height_cm = (y2 - y1) * pixel_to_cm
+    return height_cm
+  
+def draw_bounding_boxes(frame, pixel_to_cm):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    blur = cv2.GaussianBlur(gray, (1, 1), 0)
+    _, thresh = cv2.threshold(blur, 127, 255, cv2.THRESH_BINARY)
+
+    contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    for contour in contours:
+        # Approximate the contour as a circle
+        (x, y), radius = cv2.minEnclosingCircle(contour)
+        center = (int(x), int(y))
+        radius = int(radius)
+
+        # Calculate bounding box coordinates
+        x1, y1 = int(x - radius), int(y - radius)
+        x2, y2 = int(x + radius), int(y + radius)
+
+        # Draw the bounding box
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+        # Calculate the height in centimeters
+        height_cm = calculate_height(y1, y2, pixel_to_cm)
+        distance_cm = (8206.58624* 4.1) / height_cm
+        # Display the height
+        cv2.putText(frame, f"distance: {distance_cm:.2f} cm", (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+
+    return frame
+
+
+
+
 
 def analyseFrame(frame):
-    
+    pixel_to_cm = 1 
+    filtered_frame=filterHSV(frame)
+    filtered_frame=draw_bounding_boxes(filtered_frame, pixel_to_cm)
     #frame = cv2.resize(frame, (640, 480))
     edges = cv2.Canny(frame, 150, 255)
     edges=cvu.roi(edges,[vertices])
@@ -51,11 +105,14 @@ def analyseFrame(frame):
     walls=[0,0,0]
     #frame=draw_grid(frame,(2,2))
     #cv2.circle(frame, (320,240), 6, (0,255,0), 1)
+    
     line_buffer=[None,None,None]
     for i in range(0,len(masks)):
         mask=masks[i]
         lines = cv2.HoughLinesP(cvu.roi(edges,[mask]),1, np.pi/180, threshold=150, minLineLength=50 , maxLineGap=5)
-
+        
+       
+        
         bundler = cvu.HoughBundler(min_distance=10,min_angle=2)
         lines = bundler.process_lines(lines,(i!=1))
        
@@ -79,8 +136,9 @@ def analyseFrame(frame):
     cvu.__draw_label(frame, 'walls = [%d , %d, %d]' % tuple(walls), (20,40), (255,255,255))
     cvu.__draw_label(frame, 'descision = %s' % descision(walls), (20,60), (255,255,255))
     cv2.imshow("edges", edges)
+    cv2.imshow('Bounding Boxes', filtered_frame)
     cv2.imshow("frame", frame)
-    cv2.waitKey(1)
+    cv2.waitKey(75)
     
 #Actual computer vision stuff
 # while True:

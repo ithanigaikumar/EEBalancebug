@@ -3,7 +3,7 @@ from PIL.Image import core as _imaging
 from PIL import Image
 
 
-def process_chunks(chunks, width=640, height=480):
+def decode_frame(chunks, width=640, height=480):
     num_chunks = len(chunks) // 8
 
     # Create a blank image
