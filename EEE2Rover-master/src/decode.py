@@ -13,18 +13,18 @@ def decode_frame(chunks, width=640, height=480):
     for i in range(num_chunks - 1, -1, -1):
         chunk = chunks[i * 8 : (i * 8) + 8]
         binary = bin(int(chunk, 16))[2:].zfill(32)
-
+        #11 12 13 14 15 16 17 18 
         #new_frame = int(binary[0:1], 2)
         x_start = int(binary[1:11], 2)
         y_start = int(binary[11:19], 2)
-        chunk_length = int(binary[19:32], 2)
+        run_length = int(binary[19:32], 2)
 
         # if new_frame:
         #     img = np.zeros([height, width, 3], dtype=np.uint8)
         #     img.fill(255)  # reset to white
 
-        if x_start + chunk_length <= width:
-            for x in range(x_start, x_start + chunk_length):
+        if x_start + run_length <= width:
+            for x in range(x_start, x_start + run_length):
                 # Set the pixel to black
                 img[y_start, x] = [255, 255, 255]  # RGB
 

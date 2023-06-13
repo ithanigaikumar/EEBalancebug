@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import cv_utils as cvu
 #video = cv2.VideoCapture("maze_view.mp4")
-import dfs_traversal
+
   
 kernel = np.ones((5,5),np.uint8)    
    
@@ -21,13 +21,6 @@ count=0
 
 
 # utility functions because cant have them in seperate files for pyscript
-
-
-
-
-
-
-
 
 #Movement and graph building logic
 def descision(walls):
@@ -94,11 +87,11 @@ def draw_bounding_boxes(frame, pixel_to_cm):
 
 
 
-def analyseFrame(frame):
+def analyse_frame(frame):
+    frame = cv2.resize(frame, (640, 480))
     pixel_to_cm = 1 
     filtered_frame=filterHSV(frame)
     filtered_frame=draw_bounding_boxes(filtered_frame, pixel_to_cm)
-    #frame = cv2.resize(frame, (640, 480))
     edges = cv2.Canny(frame, 150, 255)
     edges=cvu.roi(edges,[vertices])
     #edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
@@ -136,8 +129,8 @@ def analyseFrame(frame):
     cv2.imshow("edges", edges)
     cv2.imshow('Bounding Boxes', filtered_frame)
     cv2.imshow("frame", frame)
-    cv2.waitKey(75)
-    return walls
+    cv2.waitKey(0)
+    return walls,offset
     
 #Actual computer vision stuff
 # while True:

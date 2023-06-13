@@ -1,7 +1,7 @@
 import cv2
 import processing
 
-video = cv2.VideoCapture("beacon_sweep.mp4")
+video = cv2.VideoCapture("beacon_test.mp4")
 #Actual computer vision stuff
 while True:
     
@@ -9,10 +9,10 @@ while True:
     
    
     if not ret:
-        video = cv2.VideoCapture("beacon_sweep.mp4")
+        video = cv2.VideoCapture("beacon_test.mp4")
         continue
     
-    processing.analyseFrame(frame)
+    processing.analyse_frame(frame)
     
     
     #save frame
