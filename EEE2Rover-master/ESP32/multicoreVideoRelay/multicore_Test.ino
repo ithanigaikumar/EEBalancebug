@@ -1,3 +1,11 @@
+#define left_dir_pin 27
+#define left_step_pin 26
+#define right_dir_pin 25
+#define right_step_pin 33
+#define steps_per_revolution 200 //will determine the lowest and fastest frequencies we get. But absolute max and min have no direct relationship with it. Find with experiment
+
+#define sgn(val) ((val) >= 0 ? HIGH : LOW)
+
 #include <Arduino.h>
 #include <ESPAsyncWebServer.h>
 #include <WiFi.h>
@@ -1032,7 +1040,7 @@ void Task1code( void * parameter) {
 
 //Control loop
 //get w from controller, get step differences, determine the number of cycles needed and not toggle until they're passed. at the end of one toggle period change the motor period
-void ControlTask(){//TEST DELAY REACTIVITY TOMORROW WITH POWER SOURCE AND DETERMINE DELAY CAUSED MAXIMUM VELOCITY (DYNAMICALLY UPDATE IT BASED ON DELAY AVAILABLE IN SYSTEM?). 
+void ControlTask( void * parameter){//TEST DELAY REACTIVITY TOMORROW WITH POWER SOURCE AND DETERMINE DELAY CAUSED MAXIMUM VELOCITY (DYNAMICALLY UPDATE IT BASED ON DELAY AVAILABLE IN SYSTEM?). 
   //DO CONTROLLER TEST WITHOUT SERIALS AND CHANGE DUTY CYCLE AMOUNT TO ALLOW SMOOTHNESS. sensor done, basic control and calibration left. Another pole placement controller to control bandwidth of lqr stabilized controller?, or use pole placement to stabilize then lqr to thrive?
   // put your main code here, to run repeatedly:
 
