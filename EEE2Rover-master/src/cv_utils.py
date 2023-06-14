@@ -298,9 +298,9 @@ class HoughBundler:
             
             for line_i in [l[0] for l in lines]:
                 orientation = self.get_orientation(line_i)
-                if np.power(-1,(align==2))*25 <= (orientation) <= np.power(-1,(align==2))*90:
+                if 25 <=  np.power(-1,(align==2))*(orientation) <= 90:
                     lines_vertical.append(line_i)
-                elif -10 <= orientation <= 10:
+                elif -20 <= orientation <= 20:
                     lines_horizontal.append(line_i)
 
         lines_vertical  = sorted(lines_vertical , key=lambda line: line[1])

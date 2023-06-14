@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
 import cv_utils as cvu
+import perspective_utils
+import mapping
 #video = cv2.VideoCapture("maze_view.mp4")
 
   
@@ -142,7 +144,7 @@ def action(current_state,next_state):
 def points_from_action(action,line_buffer):
     
     if action==0:
-        return 0,0
+        return 320,320
     elif action==1:
         s1=0
         s2=2
@@ -157,11 +159,11 @@ def points_from_action(action,line_buffer):
         s2=2
     x_m=cvu.find_mid_point([line_buffer[s1],line_buffer[s2]])[0]
     x_v=cvu.find_vanishing_point([line_buffer[s1],line_buffer[s2]])[0]
-    return x_m-320,x_v-320
+    return x_m,x_v
     
 def analyse_frame(frame,current_state):
     frame = cv2.resize(frame, (640, 480))
-    debug_frame=frame.copy()
+   
     pixel_to_cm = 1 
     filtered_frame=filterHSV(frame)
     filtered_frame=draw_bounding_boxes(filtered_frame, pixel_to_cm)
@@ -178,14 +180,17 @@ def analyse_frame(frame,current_state):
     frame=cv2.rectangle(frame,left_mask[0],left_mask[2],(0,255,0),1)
     frame=cv2.rectangle(frame,right_mask[0],right_mask[2],(0,255,0),1)
     #cv2.circle(frame, (320,240), 6, (0,255,0), 1)
-    
+    brush=perspective_utils.birdeye(frame)[0]
+    map=mapping.create_fixed_size_image(9*100,6*100,(0,0,0))
+    map=mapping.overlay_image(map,brush,(0,0),0)
+    debug_frame=map.copy()
     linesP = cv2.HoughLinesP(edges,1, np.pi/180, threshold=100, minLineLength=10 , maxLineGap=5)
     #cvu.draw_lines(linesP[0],debug_frame)
-    if linesP is not None:
-        for i in range(0, len(linesP)):
-                l = linesP[i][0]
-                cv2.line(debug_frame, (l[0], l[1]), (l[2], l[3]), (0,0,255), 2, cv2.LINE_AA)
-                cv2.putText(debug_frame, str(cvu.get_orientation_gl(l)), (l[0], l[1] + 10),cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 2)
+    # if linesP is not None:
+    #     for i in range(0, len(linesP)):
+    #             l = linesP[i][0]
+    #             cv2.line(debug_frame, (l[0], l[1]), (l[2], l[3]), (0,0,255), 2, cv2.LINE_AA)
+    #             cv2.putText(debug_frame, str(cvu.get_orientation_gl(l)), (l[0], l[1] + 10),cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 2)
     
     line_buffer=[None,None,None]
     for i in range(0,len(masks)):
@@ -202,13 +207,13 @@ def analyse_frame(frame,current_state):
             walls[i]=0
             #create a dummy line
             if(i==0):
-                lines=[[0,480,20,0]]
+                lines=[[0,480,60,0]]
                 line_buffer[i]=[0,480,0,0]
             if(i==1):
                 lines=[[0,200,640,300]]
                 line_buffer[i]=[0,0,640,0]
             elif(i==2):
-                lines=[[640,480,620,0]]
+                lines=[[640,480,560,0]]
                 line_buffer[i]=[640,480,640,0]
         cvu.draw_lines(lines,frame)
    
@@ -229,23 +234,25 @@ def analyse_frame(frame,current_state):
     action_taken=action(current_state,next_state)
     x_m,x_v=points_from_action(action_taken,line_buffer)
     #print(offset)
-    h=2.12
-    camera_tilt=36*np.pi/180
-    focal_length=8.247
-    sensor_width = 36
-    sensor_height = 24
-    horizontal_scale = sensor_width / (2 * focal_length)
-    k1=horizontal_scale*camera_tilt/np.cos(camera_tilt)
-    k2=-horizontal_scale*focal_length*np.sin(camera_tilt)/h
-    k3=horizontal_scale*focal_length*np.cos(camera_tilt)
-    kp=100
-    linear_vel=int(action_taken!=0)*0.2
-    angular_vel = (k1/(k1*k3+x_m*x_v))*(-(k2/k1)*linear_vel*x_v-kp*x_m)
-
-    #cv2.circle(frame, tuple(offset), 6, (0,0,255), 5)
+    # h=2.12
+    # camera_tilt=36*np.pi/180
+    # focal_length=8.247
+    # sensor_width = 36
+    # sensor_height = 24
+    # horizontal_scale = sensor_width / (2 * focal_length)
+    # k1=horizontal_scale*camera_tilt/np.cos(camera_tilt)
+    # k2=-horizontal_scale*focal_length*np.sin(camera_tilt)/h
+    # k3=horizontal_scale*focal_length*np.cos(camera_tilt)
+    # kp=10
+    linear_vel=int(action_taken!=0)*0.5
+    # angular_vel = -(k1/(k1*k3+x_m*x_v))*(-(k2/k1)*linear_vel*x_v-kp*x_m)
+    angular_vel=((x_m+x_v)/2-320)/5
+    cv2.circle(frame, (int(x_m),240), 4, (0,255,0), 10)
+    cv2.circle(frame, (int(x_v),240), 4, (255,0,0), 10)
     cvu.__draw_label(frame, 'angular vel = %f' % (angular_vel), (20,20), (255,255,255))
     cvu.__draw_label(frame, 'walls = [%d , %d, %d]' % tuple(walls), (20,40), (255,255,255))
-    cvu.__draw_label(frame, 'state = %s' % decode_state(next_state), (20,60), (255,255,255))
+    cvu.__draw_label(frame, 'next_state = %s (%s)' % (decode_state(next_state),next_state), (20,60), (255,255,255))
+    cvu.__draw_label(frame, 'current_state = %s (%s)' % (decode_state(current_state),current_state), (20,80), (255,255,255))
     
     return next_state,linear_vel,angular_vel,frame,debug_frame
     
