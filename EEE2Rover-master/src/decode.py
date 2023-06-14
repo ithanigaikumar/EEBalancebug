@@ -2,6 +2,9 @@ import numpy as np
 from PIL.Image import core as _imaging
 from PIL import Image
 
+roverState = 0 #can send commands to rover when roverState = 1
+x_prev = 0
+y_prev = 0
 
 def decode_frame(chunks, width=640, height=480):
     num_chunks = len(chunks) // 8
@@ -28,11 +31,42 @@ def decode_frame(chunks, width=640, height=480):
                 # Set the pixel to black
                 img[y_start, x] = [255, 255, 255]  # RGB
 
+
     # Convert numpy array to Image
     #img_pil = Image.fromarray(img)
     #img_cv = np.array(img_pil)
     #img_cv = img_cv[:, :, ::-1].copy() 
     return img
+
+def decode_position(posdata): #
+    global roverState
+    roverState = posdata[0]
+
+    angleStr = posdata[1:6]
+    whole = int(angleStr[0:3])
+    fraction = int(angleStr[3:5]) / 100.0
+    angle = np.radians(whole + fraction)
+
+    displacementStr = posdata[6:11]
+    whole = int(displacementStr[0:3])
+    fraction = int(displacementStr[3:5]) / 100.0
+    displacement = whole + fraction
+
+    deltax = int(displacement * np.cos(np.pi/2 - angle))
+    deltay = int(displacement * np.sin(np.pi/2 - angle))
+    global x_prev, y_prev
+    x_prev += deltax
+    y_prev += deltay
+    return x_prev, y_prev
+
+
+
+
+
+
+
+
+    
 
 
 
