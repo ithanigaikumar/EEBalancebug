@@ -12,6 +12,7 @@
     <script src="libraries/p5.min.js"></script>
     <script src="libraries/p5.sound.min.js"></script>
     <link rel="stylesheet" href="https://pyscript.net/latest/pyscript.css" />
+<script defer src="https://pyscript.net/latest/pyscript.js"></script>
 </head>
 
 <body>
@@ -21,8 +22,42 @@
     <!-- <iframe src="http://192.168.43.1:4747/video" id="videoElement" ></iframe> -->
 
     <h1>EEMAP</h1>
+    <py-config>
+        packages = ["opencv-python","pillow"]
+        [[fetch]]
 
+        from = "./"
 
+        files = ["cv_utils.py"]
+    </py-config>   
+    <py-script>
+        import asyncio
+        import json
+        from request import request  # import our request function.
+
+        async def main():
+            baseurl = "https://jsonplaceholder.typicode.com"
+            # GET
+            headers = {"Content-type": "application/json"}
+            response = await request(f"{baseurl}/posts/2", method="GET", headers=headers)
+            print(f"GET request=> status:{response.status}, json:{await response.json()}")
+
+            # POST
+            body = json.dumps({"title": "test_title", "body": "test body", "userId": 1})
+            new_post = await request(f"{baseurl}/posts", body=body, method="POST", headers=headers)
+            print(f"POST request=> status:{new_post.status}, json:{await new_post.json()}")
+
+            # PUT
+            body = json.dumps({"id": 1, "title": "test_title", "body": "test body", "userId": 2})
+            new_post = await request(f"{baseurl}/posts/1", body=body, method="PUT", headers=headers)
+            print(f"PUT request=> status:{new_post.status}, json:{await new_post.json()}")
+
+            # DELETE
+            new_post = await request(f"{baseurl}/posts/1", method="DELETE", headers=headers)
+            print(f"DELETE request=> status:{new_post.status}, json:{await new_post.json()}")
+
+        asyncio.ensure_future(main())
+    </py-script>
     <div class="statuses">
         <div class="status scan-bar acrylic">
             <div class="title " style="margin-bottom:0.25em;">CONTROL</div>
@@ -73,7 +108,7 @@
     const ctx = canvas.getContext('2d');
     let imgData = ctx.createImageData(640, 240);
     for (let i = 0; i < imgData.data.length; i += 4) {
-        imgData.data[i + 3] = 255;
+    imgData.data[i + 3] = 255;
     }
 
     // // Initialize an all black image
@@ -84,9 +119,9 @@
     //     const numChunks = chunks.length / 8;
     //     for (let i = 0; i < numChunks; i++) {
     //         const chunk = chunks.slice(i * 8, (i * 8) + 8);
-
+            
     //         const binary = parseInt(chunk, 16).toString(2).padStart(32, '0');
-
+            
 
     //         // Unpack the chunk
     //         const newFrame = parseInt(binary.slice(0, 1), 2);      // Take 1 bit
@@ -114,7 +149,7 @@
     // }
     function processChunks(chunks, width = 640, height = 240) {
         const numChunks = chunks.length / 8;
-        for (let i = numChunks-1; i > 0; i--) {
+        for (let i = 0; i < numChunks; i++) {
             const chunk = chunks.slice(i * 8, (i * 8) + 8);
             const binary = parseInt(chunk, 16).toString(2).padStart(32, '0');
 
@@ -126,17 +161,17 @@
             if (newFrame) {
                 imgData = ctx.createImageData(width, height); // reset imgData
                 for (let i = 0; i < imgData.data.length; i += 4) {
-                    imgData.data[i + 3] = 255;
+                imgData.data[i + 3] = 255;
                 }
             }
 
-            if ((xStart + chunkLength) <= width) {
+            if((xStart + chunkLength) <= width){
                 for (let x = xStart; x < xStart + chunkLength; x++) {
                     let index = (yStart * imgData.width + x) * 4;
-                    imgData.data[index + 0] = 255; // Red: full intensity
-                    imgData.data[index + 1] = 255; // Green: full intensity
-                    imgData.data[index + 2] = 255; // Blue: full intensity
-                    imgData.data[index + 3] = 255; // Alpha: fully opaque
+                    imgData.data[index+0] = 255;   // Red: full intensity
+                    imgData.data[index+1] = 255;   // Green: full intensity
+                    imgData.data[index+2] = 255;   // Blue: full intensity
+                    imgData.data[index+3] = 255;   // Alpha: fully opaque
                 }
             }
 
@@ -144,7 +179,12 @@
             ctx.putImageData(imgData, 0, 0);
         }
     }
-    let ws; // WebSocket connection
+    const chunks = '97c2800316e2a0101662c0171622e01b15c30021158320251523402a14a36030144380351423a03713a3c03c1343e0411324004312e4204512c4404712a460491284804b1264a04d1244c04f1224e0511205005311e5205411c5405511a56058118580591165a05a1145c05c1125e05d1126005e1106205f10e6406110e6606110c6806310a6a0651086c0661086e06610870067106720681067406810691046a068106a06b106a06b106a06b106a06b106a06b108700671067206910467406810474068106a068106a06b106a06b106a06b106a06b106a06b1087006710672069106710672069108606c108806c1088a06d0fe8c06e0fe8e06e0fe9006f0fe9206f0fe9406f0fe9606f0fe9806f0fe9a06f0fc9c0700fe9e06f0fea006f0fea206e0fca406f';
+    //setInterval(update(), 1);
+    imgReq.onreadystatechange = function () {
+        if (this.readyState == 4 && this.status == 200) {
+            imgRLE = this.responseText;
+    let ws;  // WebSocket connection
 
     function setupWebSocket() {
         ws = new WebSocket('ws://' + ip + '/ws');

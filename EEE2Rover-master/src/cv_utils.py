@@ -3,7 +3,50 @@ import numpy as np
 import math
 # import calibration_utils
 # import perspective_utils
+def is_point_inside_region(x, y, xlim,ylim):
+    if 0 <= x <= xlim and 0 <= y <= ylim:
+        return True
+    else:
+        return False
 
+
+def do_line_segments_intersect(segment1, segment2):
+    x1, y1, x2, y2 = segment1
+    x3, y3, x4, y4 = segment2
+
+    # Calculate the orientation of three points (p, q, r)
+    def calculate_orientation(p, q, r):
+        val = (q[1] - p[1]) * (r[0] - q[0]) - (q[0] - p[0]) * (r[1] - q[1])
+        if val == 0:
+            return 0  # Collinear
+        elif val > 0:
+            return 1  # Clockwise
+        else:
+            return 2  # Counterclockwise
+
+    # Check if the segments intersect using the orientation of endpoints
+    def check_intersection(p1, q1, p2, q2):
+        o1 = calculate_orientation(p1, q1, p2)
+        o2 = calculate_orientation(p1, q1, q2)
+        o3 = calculate_orientation(p2, q2, p1)
+        o4 = calculate_orientation(p2, q2, q1)
+
+        # General case: segments intersect if orientations are different
+        if o1 != o2 and o3 != o4:
+            return True
+
+        # Special cases for collinear and touching segments
+        if (o1 == 0 and p2 in [p1, q1]) or (o2 == 0 and q2 in [p1, q1]) or \
+                (o3 == 0 and p1 in [p2, q2]) or (o4 == 0 and q1 in [p2, q2]):
+            return True
+
+        return False
+
+    # Check if both line segments intersect
+    if check_intersection((x1, y1), (x2, y2), (x3, y3), (x4, y4)):
+        return True
+
+    return False
 def __draw_label(img, text, pos, bg_color):
    font_face = cv2.FONT_HERSHEY_SIMPLEX
    scale = 0.6
@@ -32,6 +75,7 @@ def draw_lines(lines,frame):
         for line in lines:
             if line is not None:
                 x1, y1, x2, y2 = line
+                cv2.putText(frame, str(get_orientation_gl(line)), (x1, y1 + 10),cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 2)
                 cv2.line(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
 def draw_grid(img, grid_shape, color=(0, 255, 0), thickness=1):
     h, w, _ = img.shape
@@ -85,13 +129,35 @@ def average_nearby_lines(lines, threshold_angle, threshold_dist):
         averaged_lines.append([averaged_line.tolist()])
 
     return averaged_lines
-def GetVanishingPoint(Lines):
+
+def find_vanishing_point(lines):
+    line1, line2=lines
+    x1, y1, x2, y2 = line1
+    x3, y3, x4, y4 = line2
+
+    x = ((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / \
+        ((x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4))
+    y = ((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / \
+        ((x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4))
+    return [x,y]
+def get_orientation_gl(line):
+    a=  dx = line[0] - line[2]
+    dy =(line[1]- line[3])
+    
+    orientation = -np.arctan(dy/dx)
+ 
+    return np.degrees(orientation)
+        
+       
+       
+
+def find_mid_point(Lines):
    #find the midpoint of the lines
 
    x1, y1, x2, y2 = Lines[0]
    x1c, y1c, x2c, y2c = Lines[1]
    x=(x1+x2+x1c+x2c)/4
-   return [int(x),240]
+   return [x,240]
 def closest_to_center(lines):
     if lines !=[]:
         closest_line = lines[0]
@@ -129,9 +195,13 @@ class HoughBundler:
         self.min_distance = min_distance
         self.min_angle = min_angle
     
-    def get_orientation(self, line):
-        orientation = math.atan2(abs((line[3] - line[1])), abs((line[2] - line[0])))
-        return math.degrees(orientation)
+    def get_orientation(self,line):
+        dx = line[0] - line[2]
+        dy =(line[1]- line[3])
+        
+        orientation = -np.arctan(dy/dx)
+    
+        return np.degrees(orientation)
 
     def check_is_line_different(self, line_1, groups, min_distance_to_merge, min_angle_to_merge):
         for group in groups:
@@ -221,20 +291,22 @@ class HoughBundler:
     def process_lines(self, lines, align):
         lines_horizontal  = []
         lines_vertical  = []
+        #if align is == 0 then we want the left lines which are vertical and have positive slope
+        #if align is == 1 then we want the front lines which are horizontal and have low slope
+        #if align is == 2 then we want the right lines which are vertical and have negative slope
         if lines is not None:
             
             for line_i in [l[0] for l in lines]:
                 orientation = self.get_orientation(line_i)
-                # if vertical
-                if 25 < orientation <= 90:
+                if np.power(-1,(align==2))*25 <= (orientation) <= np.power(-1,(align==2))*90:
                     lines_vertical.append(line_i)
-                else:
+                elif -10 <= orientation <= 10:
                     lines_horizontal.append(line_i)
 
         lines_vertical  = sorted(lines_vertical , key=lambda line: line[1])
         lines_horizontal  = sorted(lines_horizontal , key=lambda line: line[0])
         merged_lines_all = []
-        if align == 1:
+        if align != 1:
             target_lines = lines_vertical
         else:
             target_lines = lines_horizontal

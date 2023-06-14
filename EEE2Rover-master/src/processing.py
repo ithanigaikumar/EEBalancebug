@@ -6,9 +6,11 @@ import cv_utils as cvu
   
 kernel = np.ones((5,5),np.uint8)    
    
-vertices= np.array([[0,480],[0,270],[640,270],[640,480],
+vertices= np.array([[0,480],[0,240],[640,240],[640,480],
                          ], np.int32)  
-forward_mask= np.array([[200,350],[200,270],[440,270],[440,350],
+top_mask= np.array([[0,480],[0,240],[640,240],[640,480],
+                         ], np.int32)  
+front_mask= np.array([[150,370],[150,240],[490,240],[490,370],
                          ], np.int32)  
 left_mask = np.array([[0,480],[0,0],[320,0],[320,480],
                          ], np.int32)  
@@ -17,23 +19,25 @@ right_mask = np.array([[320,480],[320,0],[640,0],[640,480],
 #count for exporting frames
 count=0
 
-# Specify size on horizontal axis
 
 
 # utility functions because cant have them in seperate files for pyscript
 
 #Movement and graph building logic
-def descision(walls):
-    if walls==[1,1,0]:
-       return "Right"
-    elif walls==[0,1,1]:
-       return  "Left"
-    elif walls==[1,0,1]:
-     return "Forward"
-    elif walls==[1,1,1]:
-     return "Backtrack"
-    else:
-        return "Undefined"
+def state(p1,p2,p3,p4,p5,p6):
+    if p1:
+        return 1 #empty space
+    if p2:
+        return 2 #facing a wall
+    if p3 and p5:
+        return 3 # corridor
+    if p3 and not p5 and not p6:
+        return 4 #dangerous turn
+    if p3 and not p5 and p6:
+        return 5 #facing edge
+    if p4:
+        return 6 #approaching a turn
+    
 def filterHSV(frame):
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
       
@@ -66,46 +70,129 @@ def draw_bounding_boxes(frame, pixel_to_cm):
         (x, y), radius = cv2.minEnclosingCircle(contour)
         center = (int(x), int(y))
         radius = int(radius)
+        if radius>0:
+            # Calculate bounding box coordinates
+            x1, y1 = int(x - radius), int(y - radius)
+            x2, y2 = int(x + radius), int(y + radius)
 
-        # Calculate bounding box coordinates
-        x1, y1 = int(x - radius), int(y - radius)
-        x2, y2 = int(x + radius), int(y + radius)
+            # Draw the bounding box
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-        # Draw the bounding box
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-        # Calculate the height in centimeters
-        height_cm = calculate_height(y1, y2, pixel_to_cm)
-        distance_cm = (8206.58624* 4.1) / height_cm
-        # Display the height
-        cv2.putText(frame, f"distance: {distance_cm:.2f} cm", (x1, y1 - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            # Calculate the height in centimeters
+            height_cm = calculate_height(y1, y2, pixel_to_cm)
+            distance_cm = (8206.58624* 4.1) / height_cm
+            # Display the height
+            cv2.putText(frame, f"distance: {distance_cm:.2f} cm", (x1, y1 - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
     return frame
 
+def decode_state(state):
+    if state==1:
+        return "empty space"
+    if state==2:
+        return "facing a wall"
+    if state==3:
+        return "corridor"
+    if state==4:
+        return "dangerous turn"
+    if state==5:
+        return "facing edge"
+    if state==6:
+        return "approaching a turn"
 
-
-
-
-def analyse_frame(frame):
+def action(current_state,next_state):
+    if current_state==0:#entry state
+        return 0
+    if current_state==1: #empty space
+        if next_state==1:
+            return 2
+        elif next_state==2:
+            return 2
+    if current_state==2: #facing a wall
+        if next_state==6:
+            return 3 
+        elif next_state==2:
+            return 1 # go forward
+        elif next_state==3:
+            return 3 
+    if current_state==3: #corridor
+        if next_state == 3:
+            return 4
+        elif next_state == 6:
+            return 4
+    if current_state==4:
+        if next_state==4:
+            return 3
+        if next_state==6:
+            return 3
+    if current_state==5:
+        if next_state==5:
+            return 3
+        if next_state==3:
+            return 3
+    if current_state==6:
+        if next_state==2:
+            return 4
+        if next_state==6:
+            return 4
+        if next_state==5:
+            return 4
+    return 0
+def points_from_action(action,line_buffer):
+    
+    if action==0:
+        return 0,0
+    elif action==1:
+        s1=0
+        s2=2
+    elif action==2:
+        s1=0
+        s2=1
+    elif action==3:
+        s1=0
+        s2=1
+    elif action==4:
+        s1=0
+        s2=2
+    x_m=cvu.find_mid_point([line_buffer[s1],line_buffer[s2]])[0]
+    x_v=cvu.find_vanishing_point([line_buffer[s1],line_buffer[s2]])[0]
+    return x_m-320,x_v-320
+    
+def analyse_frame(frame,current_state):
     frame = cv2.resize(frame, (640, 480))
+    debug_frame=frame.copy()
     pixel_to_cm = 1 
     filtered_frame=filterHSV(frame)
     filtered_frame=draw_bounding_boxes(filtered_frame, pixel_to_cm)
     edges = cv2.Canny(frame, 150, 255)
+    kernel = np.ones((3,3), np.uint8)
+    edges = cv2.dilate(edges, kernel, iterations = 1)
     edges=cvu.roi(edges,[vertices])
     #edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel)
-    masks=[left_mask,forward_mask,right_mask]
+    masks=[left_mask,front_mask,right_mask]
     walls=[0,0,0]
-    #frame=draw_grid(frame,(2,2))
+    #frame=cvu.draw_grid(frame,(2,2))
+    frame=cv2.rectangle(frame,vertices[0],vertices[2],(0,255,0),1)
+    frame=cv2.rectangle(frame,front_mask[0],front_mask[2],(0,255,0),1)
+    frame=cv2.rectangle(frame,left_mask[0],left_mask[2],(0,255,0),1)
+    frame=cv2.rectangle(frame,right_mask[0],right_mask[2],(0,255,0),1)
     #cv2.circle(frame, (320,240), 6, (0,255,0), 1)
+    
+    linesP = cv2.HoughLinesP(edges,1, np.pi/180, threshold=100, minLineLength=10 , maxLineGap=5)
+    #cvu.draw_lines(linesP[0],debug_frame)
+    if linesP is not None:
+        for i in range(0, len(linesP)):
+                l = linesP[i][0]
+                cv2.line(debug_frame, (l[0], l[1]), (l[2], l[3]), (0,0,255), 2, cv2.LINE_AA)
+                cv2.putText(debug_frame, str(cvu.get_orientation_gl(l)), (l[0], l[1] + 10),cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 2)
     
     line_buffer=[None,None,None]
     for i in range(0,len(masks)):
         mask=masks[i]
-        lines = cv2.HoughLinesP(cvu.roi(edges,[mask]),1, np.pi/180, threshold=150, minLineLength=50 , maxLineGap=5)
-        bundler = cvu.HoughBundler(min_distance=10,min_angle=2)
-        lines = bundler.process_lines(lines,(i!=1))
+        lines = cv2.HoughLinesP(cvu.roi(edges,[mask]),1, np.pi/180, threshold=100, minLineLength=10 , maxLineGap=5)
+        bundler = cvu.HoughBundler(min_distance=40,min_angle=5)
+        lines = bundler.process_lines(lines,(i))
        
         if lines !=[]:
             walls[i]=1
@@ -113,24 +200,54 @@ def analyse_frame(frame):
             line_buffer[i]=lines[0]
         else:
             walls[i]=0
+            #create a dummy line
             if(i==0):
-                lines=[[0,480,0,0]]
+                lines=[[0,480,20,0]]
                 line_buffer[i]=[0,480,0,0]
+            if(i==1):
+                lines=[[0,200,640,300]]
+                line_buffer[i]=[0,0,640,0]
             elif(i==2):
-                lines=[[640,480,640,0]]
+                lines=[[640,480,620,0]]
                 line_buffer[i]=[640,480,640,0]
         cvu.draw_lines(lines,frame)
-    offset=(cvu.GetVanishingPoint([line_buffer[0],line_buffer[2]]))
+   
+    p1=(walls.count(1)==0) # no line segement is deteced
+    p2=(walls.count(1)==1) # one line segment detected
+    p3=(walls.count(1)==2) # two line segments detected
+    p4=(walls.count(1)==3) # three line segments detected
+    if p3:
+        indices = [i for i, num in enumerate(walls) if num == 1]
+        s1,s2=indices
+        t1,t2=cvu.find_vanishing_point([line_buffer[s1], line_buffer[s2]])
+        p5=(cvu.is_point_inside_region(t1,t2,640,480)) # do the vanishing points lie inside the image
+        p6=cvu.do_line_segments_intersect(line_buffer[s1], line_buffer[s2]) # the line segments intersect
+    else:
+        p5=0
+        p6=0
+    next_state=state(p1,p2,p3,p4,p5,p6)
+    action_taken=action(current_state,next_state)
+    x_m,x_v=points_from_action(action_taken,line_buffer)
     #print(offset)
+    h=2.12
+    camera_tilt=36*np.pi/180
+    focal_length=8.247
+    sensor_width = 36
+    sensor_height = 24
+    horizontal_scale = sensor_width / (2 * focal_length)
+    k1=horizontal_scale*camera_tilt/np.cos(camera_tilt)
+    k2=-horizontal_scale*focal_length*np.sin(camera_tilt)/h
+    k3=horizontal_scale*focal_length*np.cos(camera_tilt)
+    kp=100
+    linear_vel=int(action_taken!=0)*0.2
+    angular_vel = (k1/(k1*k3+x_m*x_v))*(-(k2/k1)*linear_vel*x_v-kp*x_m)
+
     #cv2.circle(frame, tuple(offset), 6, (0,0,255), 5)
-    cvu.__draw_label(frame, 'offset = %d' % (offset[0]-320), (20,20), (255,255,255))
+    cvu.__draw_label(frame, 'angular vel = %f' % (angular_vel), (20,20), (255,255,255))
     cvu.__draw_label(frame, 'walls = [%d , %d, %d]' % tuple(walls), (20,40), (255,255,255))
-    cvu.__draw_label(frame, 'descision = %s' % descision(walls), (20,60), (255,255,255))
-    cv2.imshow("edges", edges)
-    cv2.imshow('Bounding Boxes', filtered_frame)
-    cv2.imshow("frame", frame)
-    cv2.waitKey(0)
-    return walls,offset
+    cvu.__draw_label(frame, 'state = %s' % decode_state(next_state), (20,60), (255,255,255))
+    
+    return next_state,linear_vel,angular_vel,frame,debug_frame
     
 #Actual computer vision stuff
 # while True:
