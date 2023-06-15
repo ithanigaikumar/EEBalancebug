@@ -14,9 +14,9 @@ top_mask= np.array([[0,480],[0,240],[640,240],[640,480],
                          ], np.int32)  
 front_mask= np.array([[100,370],[100,0],[540,9],[5400,370],
                          ], np.int32)  
-left_mask = np.array([[0,480],[0,240],[320,240],[320,480],
+left_mask = np.array([[0,480],[0,100],[320,100],[320,480],
                          ], np.int32)  
-right_mask = np.array([[320,480],[320,240],[640,240],[640,480],
+right_mask = np.array([[320,480],[320,100],[640,100],[640,480],
                          ], np.int32)  
 #count for exporting frames
 count=0
@@ -136,6 +136,8 @@ def action(current_state,next_state):
     if current_state==6:
         if next_state==2:
             return 4
+        if next_state==4:
+            return 4
         if next_state==6:
             return 4
         if next_state==5:
@@ -246,13 +248,13 @@ def analyse_frame(frame,current_state,x_z_position,y_rotation):
     # kp=10
     linear_vel=int(action_taken!=0)*0.5
     # angular_vel = -(k1/(k1*k3+x_m*x_v))*(-(k2/k1)*linear_vel*x_v-kp*x_m)
-    angular_vel=((x_m+x_v)/2-320)/4
+    angular_vel=((x_m+x_v)/2-320)/2
     cv2.circle(frame, (int(x_m),240), 4, (0,255,0), 10)
     cv2.circle(frame, (int(x_v),240), 4, (255,0,0), 10)
-    cvu.__draw_label(frame, 'angular vel = %f' % (angular_vel), (20,20), (255,255,255))
-    cvu.__draw_label(frame, 'walls = [%d , %d, %d]' % tuple(walls), (20,40), (255,255,255))
-    cvu.__draw_label(frame, 'next_state = %s (%s)' % (decode_state(next_state),next_state), (20,60), (255,255,255))
-    cvu.__draw_label(frame, 'current_state = %s (%s)' % (decode_state(current_state),current_state), (20,80), (255,255,255))
+    cvu.__draw_label(frame, 'angular vel = %f' % (angular_vel), (20,20), (0,50,255))
+    cvu.__draw_label(frame, 'walls = [%d , %d, %d]' % tuple(walls), (20,40), (0,50,255))
+    cvu.__draw_label(frame, 'next_state = %s (%s)' % (decode_state(next_state),next_state), (20,60), (0,50,255))
+    cvu.__draw_label(frame, 'current_state = %s (%s)' % (decode_state(current_state),current_state), (20,80), (0,50,255))
     
     return next_state,linear_vel,angular_vel,frame,debug_frame
     
