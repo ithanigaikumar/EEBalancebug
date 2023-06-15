@@ -6,10 +6,11 @@ import processing
 import json
 import mapping
 # Example usage
-map = np.zeros((1000, 500, 3), dtype=np.uint8)  # Create a black image
+map = np.zeros((400, 200, 3), dtype=np.uint8)  # Create a black image
+goal=(200,100)
 positions = []  # Example positions
-brush_size = 15
-brush_color = (255, 255, 255)  # Blue color
+brush_size = 5
+brush_color = (0, 0, 255)  # Blue color
 
 
 
@@ -29,8 +30,8 @@ async def receive_camera_frame(websocket, path):
         print(dataObject)
         # Extract position data
         position = dataObject['position']
-        x = 50*position['x']
-        z = 50*position['z']
+        x = 20*position['x']
+        z = 20*position['z']
         x_z_position = (int(x), int(z))
         positions.append(x_z_position)
         # Extract rotation data
@@ -38,8 +39,8 @@ async def receive_camera_frame(websocket, path):
         y_rotation = rotation['y']
 
         # Process the position and rotation data
-        print(f"Received position: ({x}, {z})")
-        print(f"Received y-axis rotation: {y_rotation}")
+        # print(f"Received position: ({x}, {z})")
+        # print(f"Received y-axis rotation: {y_rotation}")
         frame_bytes = await websocket.recv()
         frame_np = np.frombuffer(frame_bytes, dtype=np.uint8)
         frame = cv2.imdecode(frame_np, cv2.IMREAD_COLOR)

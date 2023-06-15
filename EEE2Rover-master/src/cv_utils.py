@@ -141,7 +141,7 @@ def find_vanishing_point(lines):
         ((x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4))
     return [x,y]
 def get_orientation_gl(line):
-    a=  dx = line[0] - line[2]
+    dx = line[0] - line[2]
     dy =(line[1]- line[3])
     
     orientation = -np.arctan(dy/dx)

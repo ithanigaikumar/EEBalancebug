@@ -8,15 +8,15 @@ import perspective_utils
   
 kernel = np.ones((5,5),np.uint8)    
    
-vertices= np.array([[0,480],[0,240],[640,240],[640,480],
+vertices= np.array([[0,480],[0,0],[640,0],[640,480],
                          ], np.int32)  
 top_mask= np.array([[0,480],[0,240],[640,240],[640,480],
                          ], np.int32)  
-front_mask= np.array([[150,370],[150,240],[490,240],[490,370],
+front_mask= np.array([[100,370],[100,0],[540,9],[5400,370],
                          ], np.int32)  
-left_mask = np.array([[0,480],[0,0],[320,0],[320,480],
+left_mask = np.array([[0,480],[0,240],[320,240],[320,480],
                          ], np.int32)  
-right_mask = np.array([[320,480],[320,0],[640,0],[640,480],
+right_mask = np.array([[320,480],[320,240],[640,240],[640,480],
                          ], np.int32)  
 #count for exporting frames
 count=0
@@ -33,9 +33,9 @@ def state(p1,p2,p3,p4,p5,p6):
         return 2 #facing a wall
     if p3 and p5:
         return 3 # corridor
-    if p3 and not p5 and not p6:
+    if p3 and (not p5) and (not p6):
         return 4 #dangerous turn
-    if p3 and not p5 and p6:
+    if p3 and (not p5) and p6:
         return 5 #facing edge
     if p4:
         return 6 #approaching a turn
@@ -153,7 +153,7 @@ def points_from_action(action,line_buffer):
         s2=1
     elif action==3:
         s1=0
-        s2=1
+        s2=2
     elif action==4:
         s1=0
         s2=2
@@ -176,7 +176,7 @@ def analyse_frame(frame,current_state,x_z_position,y_rotation):
     walls=[0,0,0]
     #frame=cvu.draw_grid(frame,(2,2))
     frame=cv2.rectangle(frame,vertices[0],vertices[2],(0,255,0),1)
-    frame=cv2.rectangle(frame,front_mask[0],front_mask[2],(0,255,0),1)
+    #frame=cv2.rectangle(frame,front_mask[0],front_mask[2],(0,255,0),1)
     frame=cv2.rectangle(frame,left_mask[0],left_mask[2],(0,255,0),1)
     frame=cv2.rectangle(frame,right_mask[0],right_mask[2],(0,255,0),1)
     #cv2.circle(frame, (320,240), 6, (0,255,0), 1)
@@ -225,7 +225,7 @@ def analyse_frame(frame,current_state,x_z_position,y_rotation):
         indices = [i for i, num in enumerate(walls) if num == 1]
         s1,s2=indices
         t1,t2=cvu.find_vanishing_point([line_buffer[s1], line_buffer[s2]])
-        p5=(cvu.is_point_inside_region(t1,t2,640,480)) # do the vanishing points lie inside the image
+        p5=not(cvu.is_point_inside_region(t1,t2,640,480)) # do the vanishing points lie inside the image
         p6=cvu.do_line_segments_intersect(line_buffer[s1], line_buffer[s2]) # the line segments intersect
     else:
         p5=0
@@ -246,7 +246,7 @@ def analyse_frame(frame,current_state,x_z_position,y_rotation):
     # kp=10
     linear_vel=int(action_taken!=0)*0.5
     # angular_vel = -(k1/(k1*k3+x_m*x_v))*(-(k2/k1)*linear_vel*x_v-kp*x_m)
-    angular_vel=((x_m+x_v)/2-320)/5
+    angular_vel=((x_m+x_v)/2-320)/4
     cv2.circle(frame, (int(x_m),240), 4, (0,255,0), 10)
     cv2.circle(frame, (int(x_v),240), 4, (255,0,0), 10)
     cvu.__draw_label(frame, 'angular vel = %f' % (angular_vel), (20,20), (255,255,255))
