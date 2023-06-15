@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import cv_utils as cvu
 import perspective_utils
-import mapping
+#import mapping
 #video = cv2.VideoCapture("maze_view.mp4")
 
   
@@ -161,7 +161,7 @@ def points_from_action(action,line_buffer):
     x_v=cvu.find_vanishing_point([line_buffer[s1],line_buffer[s2]])[0]
     return x_m,x_v
     
-def analyse_frame(frame,current_state):
+def analyse_frame(frame,current_state,x_z_position,y_rotation):
     frame = cv2.resize(frame, (640, 480))
    
     pixel_to_cm = 1 
@@ -180,10 +180,10 @@ def analyse_frame(frame,current_state):
     frame=cv2.rectangle(frame,left_mask[0],left_mask[2],(0,255,0),1)
     frame=cv2.rectangle(frame,right_mask[0],right_mask[2],(0,255,0),1)
     #cv2.circle(frame, (320,240), 6, (0,255,0), 1)
-    brush=perspective_utils.birdeye(frame)[0]
-    map=mapping.create_fixed_size_image(9*100,6*100,(0,0,0))
-    map=mapping.overlay_image(map,brush,(0,0),0)
-    debug_frame=map.copy()
+    # brush=perspective_utils.birdeye(frame)[0]
+    
+    # map=mapping.overlay_image(map,brush,(20*x_z_position[0]+40,9*100-20*x_z_position[1]-40),(40,40),y_rotation)
+    debug_frame=filtered_frame.copy()
     linesP = cv2.HoughLinesP(edges,1, np.pi/180, threshold=100, minLineLength=10 , maxLineGap=5)
     #cvu.draw_lines(linesP[0],debug_frame)
     # if linesP is not None:
@@ -208,13 +208,13 @@ def analyse_frame(frame,current_state):
             #create a dummy line
             if(i==0):
                 lines=[[0,480,60,0]]
-                line_buffer[i]=[0,480,0,0]
+                line_buffer[i]=[0,480,60,0]
             if(i==1):
                 lines=[[0,200,640,300]]
-                line_buffer[i]=[0,0,640,0]
+                line_buffer[i]=[0,200,640,300]
             elif(i==2):
                 lines=[[640,480,560,0]]
-                line_buffer[i]=[640,480,640,0]
+                line_buffer[i]=[640,480,560,0]
         cvu.draw_lines(lines,frame)
    
     p1=(walls.count(1)==0) # no line segement is deteced
