@@ -15,28 +15,26 @@ brush_color = (0, 0, 255)  # Blue color
 
 
 # Display the traced image
-
-
 current_state=0
 async def receive_camera_frame(websocket, path):
     global current_state
     global positions
     global map
     while True:
-        data = await websocket.recv()
+        # data = await websocket.recv()
         
-        # Parse the JSON data
-        dataObject = json.loads(data)
-        print(dataObject)
-        # Extract position data
-        position = dataObject['position']
-        x = 20*position['x']
-        z = 20*position['z']
-        x_z_position = (int(x), int(z))
-        positions.append(x_z_position)
-        # Extract rotation data
-        rotation = dataObject['rotation']
-        y_rotation = rotation['y']
+        # # Parse the JSON data
+        # dataObject = json.loads(data)
+        # print(dataObject)
+        # # Extract position data
+        # position = dataObject['position']
+        # x = 20*position['x']
+        # z = 20*position['z']
+        # x_z_position = (int(x), int(z))
+        # positions.append(x_z_position)
+        # # Extract rotation data
+        # rotation = dataObject['rotation']
+        # y_rotation = rotation['y']
 
         # Process the position and rotation data
         # print(f"Received position: ({x}, {z})")

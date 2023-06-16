@@ -6,6 +6,8 @@ roverState = 0 #can send commands to rover when roverState = 1
 x_prev = 0
 y_prev = 0
 
+
+
 def decode_frame(chunks, width=640, height=480):
     num_chunks = len(chunks) // 8
 
@@ -19,8 +21,8 @@ def decode_frame(chunks, width=640, height=480):
         #11 12 13 14 15 16 17 18 
         #new_frame = int(binary[0:1], 2)
         x_start = int(binary[1:11], 2)
-        y_start = int(binary[11:19], 2)
-        run_length = int(binary[19:32], 2)
+        y_start = int(binary[11:20], 2)
+        run_length = int(binary[20:32], 2)
 
         # if new_frame:
         #     img = np.zeros([height, width, 3], dtype=np.uint8)
@@ -57,7 +59,7 @@ def decode_position(posdata): #
     global x_prev, y_prev
     x_prev += deltax
     y_prev += deltay
-    return x_prev, y_prev
+    return (x_prev, y_prev)
 
 
 

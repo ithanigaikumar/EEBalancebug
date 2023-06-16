@@ -1,48 +1,45 @@
 import asyncio
-# import aiohttp
-import cv2
 import websockets
-import processing 
-import decode 
-import dfs
-import random
+import cv2
 import numpy as np
+import processing
+import json
+import mapping
+import decode
 
 ip = "ws://192.168.4.1/"
-async def test():
+map = np.zeros((400, 200, 3), dtype=np.uint8)  # Create a black image
+goal=(200,100)
+positions = []  # Example positions
+brush_size = 5
+brush_color = (0, 0, 255)  # Blue color
+current_state=0
+
+async def receive_camera_frame(websocket):
     async with websockets.connect(ip+'ws') as websocket:
+        print("connected")
+        global current_state
+        global positions
+        global map
+        
         while True:
-            # await websocket.send("hello")
             response = await websocket.recv()
-            print(response)
-            img = decode.decode_frame(response[:-11])
-            x, y = decode.decode_position(response[-11:])
-            walls, offset =processing.analyse_frame(img)
-            await websocket.send(ip+"movement?offset="+offset)
-            cv2.destroyAllWindows()    
+            frame=decode.decode_frame(response)
+            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            #x_y_position=decode.decode_position(response[-11:])
+            current_state,linear_vel,angular_vel,img,filtered_img=processing.analyse_frame(frame,current_state, (0,0), 0)
+            cv2.imshow('Debug', filtered_img)
+            cv2.imshow("Img", img)
+            #map= mapping.trace_brush(map, positions, brush_size, brush_color)
+            cv2.imshow('map', map)
+            await websocket.send(str(linear_vel)+","+str(angular_vel))
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+        cv2.destroyAllWindows()
+        
 
 async def run_test():
-    while True:
-        await test()
+    async with websockets.connect(ip+'ws') as websocket:
+        while True:
+            await receive_camera_frame(websocket)
 asyncio.run(run_test())
-
-
-# ip = "http://192.168.4.1/"
-
-# async def move_forward(session, value):
-#     async with session.post(ip+'moveForward', data={'value': value}) as resp:
-#         print(await resp.text())
-
-# async def move_backward(session, value):
-#     async with session.post(ip+'moveBackward', data={'value': value}) as resp:
-#         print(await resp.text())
-
-# async def run_test():
-#     async with aiohttp.ClientSession() as session:
-#         while True:
-#             # get value to move forward or backward here, e.g. from your image analysis
-#             value = get_value_from_image_analysis()
-#             await move_forward(session, value)
-#             # or await move_backward(session, value)
-
-# asyncio.run(run_test()) send a moveforward(0,0) before each command
