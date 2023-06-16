@@ -865,13 +865,15 @@ void senseTaskCode( void * parameter){
   for(;;){
       if( current_half_period-(current_time-current_step_time)>=sense_runtime*0.9  && current_time-sense_time>=max_sense_period*0.9){ //ensure sensed values are accurately tracked while not adding significant delay to motor times
  
-      sense(); //too much sensor calls could distort the slow wave if w_turn exists. Need to limit sensor calls so slow period has less chance of getting distorted PHASE SHIFT???
+         sense(); //too much sensor calls could distort the slow wave if w_turn exists. Need to limit sensor calls so slow period has less chance of getting distorted PHASE SHIFT???
       //Called to keep pitches and yaws up to date until desired w is updated. Rover is blind during w acceleration.
     
       sense_time=micros()*0.000001;
+      vTaskDelay(50 / portTICK_PERIOD_MS);
+         
     
     }
-    delay(1);
+    
   }
 
 }
@@ -945,6 +947,7 @@ void sendVideoCode( void * parameter) {
   
     ws.textAll(hexBuffer);
     hexBuffer = "";
+    vTaskDelay(50 / portTICK_PERIOD_MS);
 
 
   }
