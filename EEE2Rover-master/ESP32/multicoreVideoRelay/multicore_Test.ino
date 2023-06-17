@@ -970,28 +970,36 @@ void setup() {
   sense_mutex = xSemaphoreCreateMutex();
 
   xTaskCreatePinnedToCore(
-        Task1code, /* Function to implement the task */
-        "Task1", /* Name of the task */
+        sendVideoCode, /* Function to implement the task */
+        "sendVideo", /* Name of the task */
         10000,  /* Stack size in words */
         NULL,  /* Task input parameter */
         0,  /* Priority of the task */
-        &Task1,  /* Task handle. */
+        &sendVideo,  /* Task handle. */
         0); /* Core where the task should run */
-
-  xTaskCreatePinnedToCore(
-        ControlTask, /* Function to implement the task */
-        "Control", /* Name of the task */
-        30000,  /* Stack size in words */
+ xTaskCreatePinnedToCore(
+        senseTaskCode, /* Function to implement the task */
+        "senseTask", /* Name of the task */
+        10000,  /* Stack size in words */
         NULL,  /* Task input parameter */
         0,  /* Priority of the task */
-        &control_handle,  /* Task handle. */
+        &senseTask,  /* Task handle. */
+        0); /* Core where the task should run */
+ xTaskCreatePinnedToCore(
+        controlTaskCode, /* Function to implement the task */
+        "controlTask", /* Name of the task */
+        10000,  /* Stack size in words */
+        NULL,  /* Task input parameter */
+        0,  /* Priority of the task */
+        &controlTask,  /* Task handle. */
         1); /* Core where the task should run */
+
 
   vTaskDelete(NULL); //delete setup task
 
 }
 
-void Task1code( void * parameter) {
+void sendVideoCode( void * parameter) {
   String hexBuffer = "";
   // float dx;
   // float timeout_time; micros()*0.000001;
