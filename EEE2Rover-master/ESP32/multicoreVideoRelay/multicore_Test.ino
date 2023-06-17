@@ -25,7 +25,9 @@ AsyncWebSocket ws("/ws");  // create WebSocket instance
 
 HardwareSerial SerialPort(2);
 
-TaskHandle_t Task1;
+TaskHandle_t sendVideo;
+TaskHandle_t senseTask;
+TaskHandle_t controlTask;
 
 void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
   if(type == WS_EVT_CONNECT){
