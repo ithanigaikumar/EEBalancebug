@@ -8,11 +8,11 @@ import perspective_utils
   
 kernel = np.ones((5,5),np.uint8)    
    
-vertices= np.array([[0,480],[0,0],[640,0],[640,480],
+vertices= np.array([[0,480],[0,100],[640,100],[640,480],
                          ], np.int32)  
-top_mask= np.array([[0,480],[0,240],[640,240],[640,480],
+null_mask= np.array([[0,0],[0,0],[0,0],[0,0],
                          ], np.int32)  
-front_mask= np.array([[100,370],[100,0],[540,9],[5400,370],
+front_mask= np.array([[0,340],[0,100],[640,100],[640,340],
                          ], np.int32)  
 left_mask = np.array([[0,480],[0,100],[320,100],[320,480],
                          ], np.int32)  
@@ -110,7 +110,7 @@ def action(current_state,next_state):
         if next_state==1:
             return 2
         elif next_state==2:
-            return 2
+            return 2 # set back to 2
     if current_state==2: #facing a wall
         if next_state==6:
             return 3 
@@ -144,12 +144,13 @@ def action(current_state,next_state):
             return 4
     return 0
 def points_from_action(action,line_buffer):
-    
+    linear_vel=0.5
     if action==0:
-        return 320,320
+        return 320,320,0
     elif action==1:
         s1=0
-        s2=2
+        s2=1
+        linear_vel=0
     elif action==2:
         s1=0
         s2=1
@@ -161,7 +162,7 @@ def points_from_action(action,line_buffer):
         s2=2
     x_m=cvu.find_mid_point([line_buffer[s1],line_buffer[s2]])[0]
     x_v=cvu.find_vanishing_point([line_buffer[s1],line_buffer[s2]])[0]
-    return x_m,x_v
+    return x_m,x_v,linear_vel
     
 def analyse_frame(frame,current_state,x_z_position,y_rotation):
     frame = cv2.resize(frame, (640, 480))
@@ -178,7 +179,7 @@ def analyse_frame(frame,current_state,x_z_position,y_rotation):
     walls=[0,0,0]
     #frame=cvu.draw_grid(frame,(2,2))
     frame=cv2.rectangle(frame,vertices[0],vertices[2],(0,255,0),1)
-    #frame=cv2.rectangle(frame,front_mask[0],front_mask[2],(0,255,0),1)
+    frame=cv2.rectangle(frame,front_mask[0],front_mask[2],(0,255,0),1)
     frame=cv2.rectangle(frame,left_mask[0],left_mask[2],(0,255,0),1)
     frame=cv2.rectangle(frame,right_mask[0],right_mask[2],(0,255,0),1)
     #cv2.circle(frame, (320,240), 6, (0,255,0), 1)
@@ -186,7 +187,7 @@ def analyse_frame(frame,current_state,x_z_position,y_rotation):
     
     # map=mapping.overlay_image(map,brush,(20*x_z_position[0]+40,9*100-20*x_z_position[1]-40),(40,40),y_rotation)
     debug_frame=filtered_frame.copy()
-    linesP = cv2.HoughLinesP(edges,1, np.pi/180, threshold=100, minLineLength=10 , maxLineGap=5)
+    #linesP = cv2.HoughLinesP(edges,1, np.pi/180, threshold=100, minLineLength=10 , maxLineGap=5)
     #cvu.draw_lines(linesP[0],debug_frame)
     # if linesP is not None:
     #     for i in range(0, len(linesP)):
@@ -197,7 +198,7 @@ def analyse_frame(frame,current_state,x_z_position,y_rotation):
     line_buffer=[None,None,None]
     for i in range(0,len(masks)):
         mask=masks[i]
-        lines = cv2.HoughLinesP(cvu.roi(edges,[mask]),1, np.pi/180, threshold=100, minLineLength=10 , maxLineGap=5)
+        lines = cv2.HoughLinesP(cvu.roi(edges,[mask]),1, np.pi/180, threshold=100, minLineLength=20, maxLineGap=5)
         bundler = cvu.HoughBundler(min_distance=40,min_angle=5)
         lines = bundler.process_lines(lines,(i))
        
@@ -209,14 +210,14 @@ def analyse_frame(frame,current_state,x_z_position,y_rotation):
             walls[i]=0
             #create a dummy line
             if(i==0):
-                lines=[[0,480,60,0]]
-                line_buffer[i]=[0,480,60,0]
+                lines=[[0,480,120,0]]
+                line_buffer[i]=[0,480,120,0]
             if(i==1):
                 lines=[[0,200,640,300]]
                 line_buffer[i]=[0,200,640,300]
             elif(i==2):
-                lines=[[640,480,560,0]]
-                line_buffer[i]=[640,480,560,0]
+                lines=[[640,480,520,0]]
+                line_buffer[i]=[640,480,520,0]
         cvu.draw_lines(lines,frame)
    
     p1=(walls.count(1)==0) # no line segement is deteced
@@ -234,7 +235,7 @@ def analyse_frame(frame,current_state,x_z_position,y_rotation):
         p6=0
     next_state=state(p1,p2,p3,p4,p5,p6)
     action_taken=action(current_state,next_state)
-    x_m,x_v=points_from_action(action_taken,line_buffer)
+    x_m,x_v,linear_vel=points_from_action(action_taken,line_buffer)
     #print(offset)
     # h=2.12
     # camera_tilt=36*np.pi/180
@@ -246,9 +247,10 @@ def analyse_frame(frame,current_state,x_z_position,y_rotation):
     # k2=-horizontal_scale*focal_length*np.sin(camera_tilt)/h
     # k3=horizontal_scale*focal_length*np.cos(camera_tilt)
     # kp=10
-    linear_vel=int(action_taken!=0)*0.5
+   
     # angular_vel = -(k1/(k1*k3+x_m*x_v))*(-(k2/k1)*linear_vel*x_v-kp*x_m)
-    angular_vel=((x_m+x_v)/2-320)/2
+    angular_vel=((x_m+x_v)/2-320)/2 + (x_m-x_v)/15
+   
     cv2.circle(frame, (int(x_m),240), 4, (0,255,0), 10)
     cv2.circle(frame, (int(x_v),240), 4, (255,0,0), 10)
     cvu.__draw_label(frame, 'angular vel = %f' % (angular_vel), (20,20), (0,50,255))

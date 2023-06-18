@@ -12,7 +12,7 @@ let backGroundColor = 0
 
 
 function setup() {
-  createCanvas(1920,1080);
+  createCanvas(180,27);
   cols = 1 + width/rez
   rows = 1 + height/rez
   
