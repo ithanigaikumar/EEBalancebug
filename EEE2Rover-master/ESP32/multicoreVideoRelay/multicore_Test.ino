@@ -25,7 +25,9 @@ AsyncWebSocket ws("/ws");  // create WebSocket instance
 
 HardwareSerial SerialPort(2);
 
-TaskHandle_t Task1;
+TaskHandle_t sendVideo;
+TaskHandle_t senseTask;
+TaskHandle_t controlTask;
 
 void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
   if(type == WS_EVT_CONNECT){
@@ -302,6 +304,23 @@ void sense_velocity_distance(){ //make dt finding better as delays could increas
   v_prev=v;
   velocity_time=micros()*0.000001;
   
+}
+
+void senseTaskCode( void * parameter){
+  for(;;){
+      if( current_half_period-(current_time-current_step_time)>=sense_runtime*0.9  && current_time-sense_time>=max_sense_period*0.9){ //ensure sensed values are accurately tracked while not adding significant delay to motor times
+ 
+         sense(); //too much sensor calls could distort the slow wave if w_turn exists. Need to limit sensor calls so slow period has less chance of getting distorted PHASE SHIFT???
+      //Called to keep pitches and yaws up to date until desired w is updated. Rover is blind during w acceleration.
+    
+      sense_time=micros()*0.000001;
+      vTaskDelay(50 / portTICK_PERIOD_MS);
+         
+    
+    }
+    
+  }
+
 }
 
 
@@ -970,28 +989,36 @@ void setup() {
   sense_mutex = xSemaphoreCreateMutex();
 
   xTaskCreatePinnedToCore(
-        Task1code, /* Function to implement the task */
-        "Task1", /* Name of the task */
+        sendVideoCode, /* Function to implement the task */
+        "sendVideo", /* Name of the task */
         10000,  /* Stack size in words */
         NULL,  /* Task input parameter */
         0,  /* Priority of the task */
-        &Task1,  /* Task handle. */
+        &sendVideo,  /* Task handle. */
         0); /* Core where the task should run */
-
-  xTaskCreatePinnedToCore(
-        ControlTask, /* Function to implement the task */
-        "Control", /* Name of the task */
-        30000,  /* Stack size in words */
+ xTaskCreatePinnedToCore(
+        senseTaskCode, /* Function to implement the task */
+        "senseTask", /* Name of the task */
+        10000,  /* Stack size in words */
         NULL,  /* Task input parameter */
         0,  /* Priority of the task */
-        &control_handle,  /* Task handle. */
+        &senseTask,  /* Task handle. */
+        0); /* Core where the task should run */
+ xTaskCreatePinnedToCore(
+        controlTaskCode, /* Function to implement the task */
+        "controlTask", /* Name of the task */
+        10000,  /* Stack size in words */
+        NULL,  /* Task input parameter */
+        0,  /* Priority of the task */
+        &controlTask,  /* Task handle. */
         1); /* Core where the task should run */
+
 
   vTaskDelete(NULL); //delete setup task
 
 }
 
-void Task1code( void * parameter) {
+void sendVideoCode( void * parameter) {
   String hexBuffer = "";
   // float dx;
   // float timeout_time; micros()*0.000001;
