@@ -21,21 +21,22 @@ async def receive_camera_frame(websocket):
     global current_state
     global positions
     global map
-
+    count=0
     while True:
-        count=0
+        
         response = await websocket.recv()
         frame=decode.decode_frame(response)
-        #frame=cv2.rotate(frame,cv2.ROTATE_180)
-        #ds = float(await websocket.recv())
-        #dtheta = float(await websocket.recv())
-        #print("ds:"+str(ds),"dtheta:",str(dtheta))
         
+        #shows received frame
         cv2.imshow("frame",frame)
+        
+        #press s to save frame for reference
         if keyboard.is_pressed('s'):
             cv2.imwrite("frame"+count+".png")
             count+=1
 
+        #add code for rotation here if needed and can remove manual yaw control
+        #Controlling the yaw manually, 
         if keyboard.is_pressed('w'):
             await websocket.send(str(1)+","+"0")
             await asyncio.sleep(1)
