@@ -8,8 +8,8 @@ brush_size = 5
 brush_color = (0, 0, 255)  # Blue color
 # Load the image from disk as a numpy ndarray
 original_img = cv2.imread('map.png')
-original_img= cv2.circle(original_img, (0,0),50, (255,255,255), -1)
-original_img= cv2.circle(original_img,(245,385),50, (255,255,255), -1)
+#original_img= cv2.circle(original_img, (0,0),50, (255,255,255), -1)
+#original_img= cv2.circle(original_img,(245,385),50, (255,255,255), -1)
 
 #original_img=cv2.resize(original_img, (0,0), fx=0.2, fy=0.2)
 # Create a flat color image for graph building:
@@ -73,4 +73,5 @@ for pixel_index in pixels_path:
     #original_img[i, j, 0] = original_img[i, j, 1] = 0
     original_img= cv2.circle(original_img, (j,i), brush_size, brush_color, -1)
 plt.imshow(original_img)
+cv2.imwrite("shortest_path.png",original_img)
 plt.show()
