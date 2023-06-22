@@ -49,7 +49,7 @@ async def receive_camera_frame(websocket):
             await websocket.send(str(linear_vel) + "," + str(angular_vel))
             await asyncio.sleep(1)  
             await websocket.send(str(0) + "," + str(0))
-            await asyncio.sleep(1)  
+            await asyncio.sleep(3)  
 
             # If rotation completed, then receive frame
             if turns > 0:
