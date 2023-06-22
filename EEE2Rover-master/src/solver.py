@@ -8,6 +8,9 @@ brush_size = 5
 brush_color = (0, 0, 255)  # Blue color
 # Load the image from disk as a numpy ndarray
 original_img = cv2.imread('map.png')
+original_img= cv2.circle(original_img, (0,0),50, (255,255,255), -1)
+original_img= cv2.circle(original_img,(245,385),50, (255,255,255), -1)
+
 #original_img=cv2.resize(original_img, (0,0), fx=0.2, fy=0.2)
 # Create a flat color image for graph building:
 img = original_img[:, :, 0] + original_img[:, :, 1] + original_img[:, :, 2]
