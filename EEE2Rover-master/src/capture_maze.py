@@ -6,6 +6,10 @@ import processing
 import json
 import mapping
 import decode
+import os
+
+if not os.path.exists('images'):
+    os.makedirs('images')
 
 ip = "ws://192.168.4.1/"
 map = np.zeros((400, 200, 3), dtype=np.uint8)  # Create a black image
@@ -36,13 +40,16 @@ async def receive_camera_frame(websocket):
 
             # Control the angular and linear velocity
             if turns < 6:
-                angular_vel = 15 if turns < 5 else 0
+                angular_vel = 20 if turns < 5 else 0
                 linear_vel = 0
             else:
                 angular_vel, linear_vel = 0, 0
 
             # Send control commands
             await websocket.send(str(linear_vel) + "," + str(angular_vel))
+            await asyncio.sleep(1)  
+            await websocket.send(str(0) + "," + str(0))
+            await asyncio.sleep(1)  
 
             # If rotation completed, then receive frame
             if turns > 0:
@@ -50,13 +57,14 @@ async def receive_camera_frame(websocket):
                 frame = decode.decode_frame(response)
                 current_state, linear_vel, angular_vel, img, filtered_img = processing.analyse_frame(frame, current_state, (0, 0), 0)
                 images.append(img)  # Add image to list
+                cv2.imwrite(f'images/image_{turns}.jpg', img)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
             retry_count = 0  # reset retry count on successful data receipt
             turns += 1
-            await asyncio.sleep(1)  # Wait for a second before next rotation
+            
 
         except (websockets.exceptions.ConnectionClosedError, ConnectionResetError) as e:
             print(f'Error occurred: {e}. Retrying...')
