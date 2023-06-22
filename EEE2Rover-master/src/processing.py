@@ -178,10 +178,12 @@ def analyse_frame(frame,current_state,x_z_position,y_rotation):
     masks=[left_mask,front_mask,right_mask]
     walls=[0,0,0]
     #frame=cvu.draw_grid(frame,(2,2))
-    frame=cv2.rectangle(frame,vertices[0],vertices[2],(0,255,0),1)
-    frame=cv2.rectangle(frame,front_mask[0],front_mask[2],(0,255,0),1)
-    frame=cv2.rectangle(frame,left_mask[0],left_mask[2],(0,255,0),1)
-    frame=cv2.rectangle(frame,right_mask[0],right_mask[2],(0,255,0),1)
+
+    # frame=cv2.rectangle(frame,vertices[0],vertices[2],(0,255,0),1) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!debug
+    # frame=cv2.rectangle(frame,front_mask[0],front_mask[2],(0,255,0),1)
+    # frame=cv2.rectangle(frame,left_mask[0],left_mask[2],(0,255,0),1)
+    # frame=cv2.rectangle(frame,right_mask[0],right_mask[2],(0,255,0),1)
+
     #cv2.circle(frame, (320,240), 6, (0,255,0), 1)
     # brush=perspective_utils.birdeye(frame)[0]
     
@@ -218,7 +220,7 @@ def analyse_frame(frame,current_state,x_z_position,y_rotation):
             elif(i==2):
                 lines=[[640,480,520,0]]
                 line_buffer[i]=[640,480,520,0]
-        cvu.draw_lines(lines,frame)
+        #cvu.draw_lines(lines,frame) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!debug
    
     p1=(walls.count(1)==0) # no line segement is deteced
     p2=(walls.count(1)==1) # one line segment detected
@@ -251,12 +253,12 @@ def analyse_frame(frame,current_state,x_z_position,y_rotation):
     # angular_vel = -(k1/(k1*k3+x_m*x_v))*(-(k2/k1)*linear_vel*x_v-kp*x_m)
     angular_vel=((x_m+x_v)/2-320)/2 + (x_m-x_v)/15
    
-    cv2.circle(frame, (int(x_m),240), 4, (0,255,0), 10)
-    cv2.circle(frame, (int(x_v),240), 4, (255,0,0), 10)
-    cvu.__draw_label(frame, 'angular vel = %f' % (angular_vel), (20,20), (0,50,255))
-    cvu.__draw_label(frame, 'walls = [%d , %d, %d]' % tuple(walls), (20,40), (0,50,255))
-    cvu.__draw_label(frame, 'next_state = %s (%s)' % (decode_state(next_state),next_state), (20,60), (0,50,255))
-    cvu.__draw_label(frame, 'current_state = %s (%s)' % (decode_state(current_state),current_state), (20,80), (0,50,255))
+    # cv2.circle(frame, (int(x_m),240), 4, (0,255,0), 10) !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!debug
+    # cv2.circle(frame, (int(x_v),240), 4, (255,0,0), 10)
+    # cvu.__draw_label(frame, 'angular vel = %f' % (angular_vel), (20,20), (0,50,255))
+    # cvu.__draw_label(frame, 'walls = [%d , %d, %d]' % tuple(walls), (20,40), (0,50,255))
+    # cvu.__draw_label(frame, 'next_state = %s (%s)' % (decode_state(next_state),next_state), (20,60), (0,50,255))
+    # cvu.__draw_label(frame, 'current_state = %s (%s)' % (decode_state(current_state),current_state), (20,80), (0,50,255))
     
     return next_state,linear_vel,angular_vel,frame,debug_frame
     
