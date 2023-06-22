@@ -6,7 +6,7 @@ from calibration_utils import calibrate_camera, undistort
 from binarization_utils import binarize
 
 
-def birdeye(img, verbose=False):
+def birdeye(img, src,dst, verbose=False):
     """
     Apply perspective transform to input frame to get the bird's eye view.
     :param img: input color frame
@@ -15,14 +15,14 @@ def birdeye(img, verbose=False):
     """
     h, w = img.shape[:2]
 
-    src = np.float32([[w, h],    # br
-                      [0, h],    # bl
-                      [270,240],   # tl
-                      [370, 240]])  # tr
-    dst = np.float32([[w, h],       # br
-                      [0, h],       # bl
-                      [0, 0],       # tl
-                      [w, 0]])      # tr
+    # src = np.float32([[w, h],    # br
+    #                   [0, h],    # bl
+    #                   [270,240],   # tl
+    #                   [370, 240]])  # tr
+    # dst = np.float32([[w, h],       # br
+    #                   [0, h],       # bl
+    #                   [0, 0],       # tl
+    #                   [w, 0]])      # tr
 
     M = cv2.getPerspectiveTransform(src, dst)
     Minv = cv2.getPerspectiveTransform(dst, src)

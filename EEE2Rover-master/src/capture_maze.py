@@ -37,7 +37,6 @@ async def receive_camera_frame(websocket):
                 cv2.destroyAllWindows()
                 websocket = await websockets.connect(ip+'ws')
                 print("Connected")
-            
 
             # Control the angular and linear velocity
             if turns < 6:
@@ -46,11 +45,6 @@ async def receive_camera_frame(websocket):
             else:
                 angular_vel, linear_vel = 0, 0
 
-            response = await websocket.recv()
-            frame = decode.decode_frame(response)
-            current_state, linear_vel, angular_vel, img, filtered_img = processing.analyse_frame(frame, current_state, (0, 0), 0)
-            images.append(img)  # Add image to list
-            cv2.imwrite(f'images/image_{turns}.jpg', img)
             # Send control commands
             await websocket.send(str(linear_vel) + "," + str(angular_vel))
             await asyncio.sleep(1)  
@@ -59,7 +53,11 @@ async def receive_camera_frame(websocket):
 
             # If rotation completed, then receive frame
             if turns > 0:
-                
+                response = await websocket.recv()
+                frame = decode.decode_frame(response)
+                current_state, linear_vel, angular_vel, img, filtered_img = processing.analyse_frame(frame, current_state, (0, 0), 0)
+                images.append(img)  # Add image to list
+                cv2.imwrite(f'images/image_{turns}.jpg', img)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
