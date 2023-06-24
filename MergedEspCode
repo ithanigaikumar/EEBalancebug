@@ -1,0 +1,4044 @@
+
+/*MOTOR PINS*/ //Green for right, orange for left motor
+
+#define left_dir_pin 27
+
+#define left_step_pin 26 //26 PROBLEM IN RISING TOO CHANGE IT   26 25 NOT GOOD. SHOULD PUT STEPPER PINS TO OTHER PINS AS DUTY PROBLEM CAN ARISE AT FAST SPEEDS
+
+#define right_dir_pin 33 //25 PIN USED BY SOMETHING ELSE ON THE BACKGROUND THAT MAKES IT TURN OFF. SO MOVE TO WORKING PINS.  14 27 26 33 WORKS
+
+#define right_step_pin 32
+
+#define debug 14
+
+#define mpu_interrupt 2
+
+ 
+
+#define sgn(x) ((x) < 0 ? LOW : HIGH)
+
+ 
+
+/*LIBRARIES*/
+
+#include <Adafruit_MPU6050.h>
+
+#include <Adafruit_Sensor.h>
+
+#include <MPU6050_6Axis_MotionApps20.h>
+
+#include <I2Cdev.h>
+
+#define USE_MPU6050   //Just defined as a flag for preprocessor. Use Either MPU6050_light or normal MPU6050
+
+ 
+
+#if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+
+    #include "Wire.h"
+
+#endif
+
+ 
+
+#include <ESPAsyncWebServer.h>
+
+#include <WiFi.h>
+
+#include <HardwareSerial.h>
+
+//#include <MPU6050_light.h>
+
+ 
+
+//Adafruit_MPU6050 mpu;
+
+//sensors_event_t a, g, temp;
+
+ 
+
+#ifdef USE_MPU6050 //make MPU variables if using that library
+
+ 
+
+  MPU6050 mpu;
+
+ 
+
+  /* MPU control/status vars*/
+
+  bool dmpReady = true;  // set true if DMP init was successful
+
+  uint8_t mpuIntStatus;   // holds actual interrupt status byte from MPU
+
+  uint8_t devStatus;      // return status after each device operation (0 = success, !0 = error)
+
+  uint16_t packetSize;    // expected DMP packet size (default is 42 bytes)
+
+  uint16_t fifoCount;     // count of all bytes currently in FIFO
+
+  uint8_t fifoBuffer[64]; // FIFO storage buffer
+
+ 
+
+  /* orientation/motion vars */
+
+  Quaternion q;           // [w, x, y, z]         quaternion container
+
+  /*VectorInt16 aa;         // [x, y, z]            accel sensor measurements
+
+  VectorInt16 aaReal;     // [x, y, z]            gravity-free accel sensor measurements
+
+  VectorInt16 aaWorld;    // [x, y, z]            world-frame accel sensor measurements
+
+  float euler[3];         // [psi, theta, phi]    Euler angle container */
+
+  VectorFloat gravity;    // [x, y, z]            gravity vector
+
+  float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
+
+ 
+
+  // packet structure for InvenSense teapot demo
+
+  //uint8_t teapotPacket[14] = { '$', 0x02, 0,0, 0,0, 0,0, 0,0, 0x00, 0x00, '\r', '\n' };
+
+ 
+
+  
+
+  
+
+  // ================================================================
+
+  // ===               INTERRUPT DETECTION ROUTINE                ===
+
+  // ================================================================
+
+ 
+
+  volatile bool mpuInterrupt = false;     // indicates whether MPU interrupt pin has gone high
+
+  void dmpDataReady() {
+
+      mpuInterrupt = true;  //interrupt kept just in case.
+
+  }
+
+ 
+
+#endif
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+/*STATE OF ROVER*/ //global
+
+bool is_vertical=true;
+
+bool listen_command=false; //true: can accept rover commands,  false: can't listen to command as currently doing a command
+
+/*Is not used to tell the website if the rover is available anymore. Is now a local state and website controls commands by https handshakes*/
+
+//set to false first because rover will be open to commands ONLY AFTER CALIBRATION IS DONE
+
+ 
+
+/*TIME FLAGS*/
+
+float pitch_time; //float due to needing to be in seconds, not milliseconds
+
+float velocity_time;
+
+float yaw_time; //DELETE THEM AFTER VERIFYING SENSE()
+
+float sense_time;
+
+float right_step_time;
+
+float left_step_time;
+
+float yaw_rate_pid_time;
+
+//float toggle_time;
+
+ 
+
+/*SENSOR OFFSETS*/
+
+float gx_offset=0;
+
+float gy_offset=0;
+
+float gz_offset=0;
+
+float ax_offset=0;
+
+float ay_offset=0;
+
+float az_offset=0;
+
+ 
+
+/*STATES*/ //global
+
+struct state{ //buffer for sensor outputs to prevent data races
+
+   float pitch; //pitch of the rover
+
+   float pitch_rate; //pitch rate of the rover
+
+   float x; //distance rover traveled
+
+   float v; //velocity of rover
+
+   float yaw; //previous v recorded in previous sense call. Made according to w value used during that time
+
+   float yaw_rate;
+
+};
+
+ 
+
+state states_current = {0, 0, 0, 0, 0, 0};
+
+state states_prev = {0, 0, 0, 0, 0, 0};
+
+#define slip_factor  1.0 //INCLUSED THE EFFECT OF SLIP ON RECORDED VELOCITY. CHANGE IF MISMATCH
+
+ 
+
+/*CONTROL CONSTANTS*/ //control
+
+float wheel_radius  =  3.25*0.01; //3.25 cm wheel radius
+
+float rover_width =  7.4*2*0.01; //WIDTH OF ROVER  -8.9443,   55.4896,   15.6862     -10.0000   58.0091   15.4356
+
+float complementary_weight  =  0.96;
+
+float pitch_offset=21.78*((2*PI)/360);
+
+float k[3]={-13.4164,   76.8782,   20.5797}; //LQR GAINS FOR VELOCITY CONTROLLER. WILL UPDATE THEM TO CALIBRATE THE RESPONSE.
+
+//ALSO COEFFICIENTS WERE FOR CONTINUOUS TIME SO WILL DO K VALUES AGAIN FOR DISCRETE TIME. AND MAKE SURE K'S OBEY THE CHOSEN MOTOR BANDWIDTH.
+
+float v_bandwidth = 20; //direction flip of the max w speed is going from max to min peak of the test sine wave. Max motor delay corresponds to half of the bandwidth frequency's period.  //include effects of website to that too!!!
+
+//kept bandwidth lower than in mind to account for website effects. INCREASE AND DECREASE ACCORDINGLY
+
+#define x_bandwidth   v_bandwidth/3 //lower bandwidth to allow tracking
+
+float kp_x  = x_bandwidth;
+
+#define yaw_rate_bandwidth    v_bandwidth //Bandwidth of yaw rate controller. CHANGE BASED ON MOTOR BANDWIDTH
+
+float ki  =  yaw_rate_bandwidth/(wheel_radius/(rover_width*0.5));
+
+#define yaw_bandwidth     yaw_rate_bandwidth/3 //lower bandwidth to allow tracking
+
+float kp_yaw  =  yaw_bandwidth;
+
+float yaw_rate_cum_error=0;
+
+ 
+
+/*LATENCIES*/ //control
+
+int total_samples  =   3; //2.5ms delay per getEvent call, will lead to around 2.5*3=7.5ms delay for 3 samples each, decrease if too much. ABSOLUTE MIN IT GIVES IS 15.4ms for 3 sample case
+
+float duty_cycle   =   0.5; //a min duty cycle needed to ensure pulse has time to rise. 0.01 is good enough
+
+#define max_sense_period      10*0.001 //Max delay latency sensors could handle. CHANGED TO CALL RATE OF SENSORS. Increase or decrease based on quality of state tracking    STEP SIZE LIMITED BY SENSOR LATENCY IF DO PER ONE CLOCK CYCLE. /*MPU DMP LIBRARY HAS PROCESSING TIME OF 14.5 MS*/
+
+#define sense_runtime     (total_samples*2.5+0.4)*0.001 //shouldn't do sense at start if period too low (fast frequency). will cap the min step period and limit max speed   ADAFRUIT IS BAD AS IT TAKES ALL SAMPLES INSTEAD OF ONE BY ONE THUS USE ELECTRONIC CAT VERSION (MIGHT STILL HAVE DELAY)
+
+//min sense period+max network delay caps the negative region of the step signal
+
+#define max_wifi_read_delay     1.3*0.000001 //usually in several microseconds. UPDATE AFTER TESTS
+
+//sensing and command checking are done when we're away from an edge of the
+
+ 
+
+bool limit_max_v=false;
+
+bool limit_max_yaw_rate=false;
+
+ 
+
+//NOT WANT TO LIMIT MIN MAX PERIOD TO ALLOW CONTROLLABILITY. LIMIT V_NORMAL!!!!!!!
+
+ 
+
+ 
+
+/* RESOLUTIONS
+
+FULL) 1800-13000 IN 1000 STEPS
+
+HALF) 1800-14000 IN 2500 STEPS
+
+16TH) 70-20000 ??? (NOW UNDER PROCESSING TIME AND HEATING. REDUCE IN OPERATION)
+
+ 
+
+*/
+
+ 
+
+//SENSOR LATENCIES COULD BE CHANGED BASED ON MICROSTEPPING, MOVING SENSOR TO CORE 0, ETC.
+
+int resolution  =  16;
+
+int steps_per_revolution  =  200 * resolution; //will determine the lowest and fastest frequencies we get. But absolute max and min have no direct relationship with it. Find with experiment
+
+float max_step_period_change = ((resolution>=16) ? 1500*0.000001 : 5000*0.000001); //do steps of 1800 micresecond while going from one w to another. CAN I DO LARGER STEPS WHEN AT LOWER SPEEDS??? TEST (W ACCELERATION DEPENDS ON MAX TORQUE GIVEN BY MOTOR AND LOAD WEIGHT)
+
+float w_step=0.18;
+
+float absolute_max_period   =  (resolution>=16) ? 20000*0.000001 : 13000*0.000001;
+
+float absolute_min_period  =   (resolution>=16) ? 70*0.000001 : 1800*0.000001; //min delay incorrect 
+
+float min_period   =   absolute_min_period; //( absolute_min_period*(1-duty_cycle) >= (sense_runtime+max_wifi_read_delay) ) ? absolute_min_period : (sense_runtime+max_wifi_read_delay)*(1/(1-duty_cycle))*1.01; //either the lowest frequency found from tests or the one limited by delays. *1.05 added to give slack
+
+ 
+
+//from aritmethic sum inequality. Aritmethic sum from min to max in 1800 steps needs to be below half of maximum allowed delay
+
+float computed_max_period   =  30*0.001;     //(max_step_period_change/2)*(-1+sqrt(1+(4/max_step_period_change)*(PI/v_bandwidth + min_period/max_step_period_change)));
+
+ 
+
+ 
+
+ 
+
+float max_period   =   min(absolute_max_period, computed_max_period); //choose based on maximum desired delay determined by v bandwidth //put in max setter method if needed to change bandwidth much
+
+//Divide 157 by 2 to get upper limit of the aritmethic sum from 2338 to max. Aritmethic sum is S=n*(avg of min+step*n and min). n=(max-min)/step       floor
+
+float w_max   =  (2*PI)/(steps_per_revolution*min_period); //PERIOD CAN'T BE LOWER THAN
+
+float w_min   =  (2*PI)/(steps_per_revolution*max_period);
+
+ 
+
+//Will kap v_max to reduce STABLE speed based on pitch angle and reaction time. Yaw rate isn't limited BUT SHOULD OBEY CAPPED STABLE V_MAX
+
+//Controller isn't limited to allow it to move freely
+
+//Potential error could be v_max<v_min if cap too low
+
+ 
+
+/*FIXED MOTOR SPEED VALUES*/ //The speeds I predetermined to be used in operations
+
+float v_normal   =   limit_max_v ? ((2*PI)/((0.375/wheel_radius)*steps_per_revolution))*wheel_radius : (w_min+w_max)*0.5*wheel_radius; //average of v range. CAN DECREASE IF TOO FAST FOR IMAGE PROCESSOR OR MAKE TOO MUCH DRIFT
+
+float v_slow   =   ((w_min+w_max)*0.5+w_min)*0.5*wheel_radius; //lower if still too high
+
+float yaw_rate_moving_normal   = limit_max_yaw_rate ? (2/3.0)*PI : (v_normal/wheel_radius-w_min)*0.5*(wheel_radius/(rover_width*0.5)); //???   yaw_rate* (rover_width/wheel_radius)
+
+float yaw_rate_moving_slow   =   (v_slow/wheel_radius-w_min)*0.5*(wheel_radius/(rover_width*0.5)); //??? Not too sure about accuracy
+
+float yaw_rate_stat_normal   = limit_max_yaw_rate ? PI : (w_min+w_max)*0.5*(wheel_radius/(rover_width*0.5)); //???
+
+float yaw_rate_stat_slow   =   (w_min)*(wheel_radius/(rover_width*0.5));
+
+ 
+
+/*MOTOR SPEED VALUES*/ //They're inputs to motors
+
+float w_left=0;
+
+float w_left_desired=0;
+
+float w_right=0; //w and w_turn are desired inputs, w_right and w_left are clamped w's given to left and right motors based on operation constraints
+
+float w_right_desired=0;
+
+float w=0; //after getting w_left and w_right. Get w_linear from average of left and right. Its sign also shows the direction of movement
+
+float w_desired=0;
+
+float w_turn=0;
+
+float w_turn_desired=0;
+
+ 
+
+ 
+
+/*MOTOR SPEED CONTROL VARIABLES*/
+
+float left_step_period=max_period;
+
+float left_step_period_desired=0;
+
+float right_step_period=max_period;
+
+float right_step_period_desired=0;
+
+//float toggle_period=steps_per_revolution*max_period; //not toggle until all motors got to steady state
+
+int cycles=0; //min half pulses needs to be done before w switch to keep operation smooth
+
+bool right_largest=true; //Tells which motor signal undergoes the longest acceleration. Half_cycles set and changed based on that signal. Left for false right for true.
+
+float steady_cycles   =  6; //number of cycles you want motor to stay on steady state for. INCREASE IF JITTER //LIMIT MIN SPEED BASED ON BANDWIDTH IF SEE PROBLEMS. CALCULATE FOR 16
+
+bool left_state=true; //Value of the corresponding step pin. Start from true so positive edge occurs after desired period passes, preventing phase shifts
+
+bool right_state=true;
+
+float right_time_shift=0; //THESE ARE DONE TO PHASE ALIGN DIFFERENT SPEEDS. Time shift is time difference of slowest recorded during period stepping
+
+float left_time_shift=0;
+
+ 
+
+/*LAPTOP INPUTS*/ //THE DESIRED STATE INPUTS
+
+float yaw_desired=0; //the actual yaw we'll try to change to. Change during turns
+
+float yaw_rate_desired=0;
+
+float v_desired=0; //set by laptop and methods
+
+float x_desired=0; //set by methods and only used for crash()
+
+int vanish=0; //pixel distance between vanishing point and image center sent by laptop. Laptop will add disturbance to it and the controller will try to keep it zero by yaw rate control
+
+bool mov=true; //should rover move while doing moveForward()?
+
+ 
+
+/*YAW COMPENSATION VARIABLES*/
+
+bool doing_yaw_compensation=false;
+
+float compensated_yaw_offset=0;
+
+int yaw_compensation_samples=0;
+
+ 
+
+ 
+
+/*COMMAND OPERATION VARIABLES*/
+
+float input;
+
+float* output;
+
+float past_output;
+
+bool control_v=true;
+
+bool control_yaw_rate=true;
+
+/*COMMAND SCHEDULER STRUCT*/
+
+struct operation{
+
+  int id;
+
+  float input;
+
+};
+
+bool start_operation=false;
+
+operation operations[4]; //HAVE FIXED SIZE OF MAX OPERATIONS. 3 IS THE MAXIMUM AMOUNT OF OPERATIONS WE HAVE
+
+int i=0; //save commands as structs of ids and inputs to an operation array
+
+ 
+
+ 
+
+/*MULTITHREADING FLAGS*/ //global
+
+bool states_changing=false; //on while sense() is running so image broadcaster will wait until yaw and v are updated
+
+bool dead_states_changing=false; //stattes_changing for image broadcaster core. Seperate flags for same resource to prevent concurrent reading
+
+bool listen_command_changing=false;
+
+bool states_updated=false;
+
+//threads read sensor state values from buffer, which is flagged, while state itself is flagged directly
+
+ 
+
+ 
+
+/* Websocket server & UART setup*/
+
+const char* ssid = "esp32aptestrlhguygue";
+
+const char* password = "wasdqwerty32";
+
+AsyncWebServer server(80);
+
+AsyncWebSocket ws("/ws");  // create WebSocket instance
+
+HardwareSerial SerialPort(2);
+
+TaskHandle_t sendVideo;
+
+TaskHandle_t senseTask;
+
+ 
+
+ 
+
+//AUTO STRUCT NAME GENERATOR MESSES THIS UP NO MATTER NAME. UPDATE IF NEEDED
+
+ 
+
+//void change_states(state buff){
+
+//
+
+//  states_current = buff;
+
+// 
+
+//}
+
+ 
+
+ 
+
+ 
+
+//do straightening during motion if mov is true, if false do when stationary
+
+void straighten(float v_in, float yaw_rate_in){ //max yaw displacement is 75 degrees. Increase for sharper turns but not 90 or would get stuck on large corridors
+
+ 
+
+  /*float straighten_turn=vanish*(max_turn_angle)/(image_width/2); //negative vanish offset lead to negative yaw rate
+
+  set_velocity(mov*v_normal);
+
+  set_yaw_rate(straighten_turn); //can both run in parallel??? IF NOT TURN IT INTO AN OPERATION. DO IT WHENEVER YOU RECEIVE NEW VALUES*/
+
+ 
+
+  set_velocity(v_in/slip_factor); //Laptop should send v_in as SI   //GIVE HIGHER V DESIRED TO ACCOMODATE THE EFFECT OF SLIP
+
+  set_yaw_rate((yaw_rate_in*((2*PI)/360))/slip_factor); //Yaw rate input in degrees convert to rad
+
+ 
+
+}
+
+ 
+
+ 
+
+//STRAIGHTEN HERE
+
+void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
+
+  if(type == WS_EVT_CONNECT){
+
+    // client connected
+
+    Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
+
+  } else if(type == WS_EVT_DISCONNECT){
+
+    // client disconnected
+
+    Serial.printf("WebSocket client #%u disconnected\n", client->id());
+
+  }
+
+  else if(type == WS_EVT_DATA){
+
+    // client sent some data
+
+    AwsFrameInfo *info = (AwsFrameInfo*)arg;
+
+    if(info->opcode == WS_TEXT){
+
+      data[len] = 0;
+
+ 
+
+      // convert incoming data to String for easier manipulation
+
+      String dataStr = String((char*)data);
+
+ 
+
+      // find the comma
+
+      int commaIndex = dataStr.indexOf(',');
+
+ 
+
+      // split the string and convert to floats
+
+      float linear_vel = dataStr.substring(0, commaIndex).toFloat();
+
+      float angular_vel = dataStr.substring(commaIndex + 1).toFloat();
+
+ 
+
+      // call straighten to set the new desired speeds
+
+      straighten(linear_vel, angular_vel);
+
+ 
+
+    }
+
+  }
+
+}
+
+ 
+
+ 
+
+ 
+
+/*Calibration only at start and zero rate compensation during movement*/
+
+/*Make website see calibration taking place*/
+
+ 
+
+//Will be called at start during mpu_setup while the rover is stationary and gets the mpu offsets needed to get stationary values zero and reduce drift
+
+//Take too long to compute so only done on start on control
+
+void mpu_calibrate(){ //ROVER NEEDS TO BE STATIONARY. WHEN ROVER DOESN'T MOVE RECORD G AND A VALUES FOR SOME TIME THEN SET THEM AS OFFSETS
+
+ 
+
+  Serial.println("GET THE ROVER TO HORIZONTAL POSITION");
+
+  delay(1500);
+
+  Serial.print("Calibrating...");
+
+  int calibration_cycles=800; //more cycles called mean more of the drift is compensated
+
+  /*CALIBRATION OFFSETS CHANGE IN EVERY CALL SO CAN'T REMOVE ERROR COMPLETELY, JUST DECREASE THE RATE AND GET RID OF FILLS DURING ZERO-RATE SECTIONS*/
+
+ 
+
+  float gx_offset_found=0;
+
+  float gy_offset_found=0;
+
+  float gz_offset_found=0;
+
+  float ax_offset_found=0;
+
+  float ay_offset_found=0;
+
+  float az_offset_found=0;
+
+ 
+
+  #ifdef USE_MPU6050
+
+ 
+
+    Serial.println("Using MPU6050");
+
+    //calibrate methods find offsets through a pid controller and writes them to the offset register of the mpu6050
+
+ 
+
+    //example had sets even after calibrate methods. TRY THEM AS THEY ARE IF BAD DO EXPERIMENT TOO
+
+    mpu.setXGyroOffset(220);
+
+    mpu.setYGyroOffset(76);
+
+    mpu.setZGyroOffset(-85);
+
+    mpu.setZAccelOffset(1788);
+
+    mpu.CalibrateAccel(calibration_cycles/100); //calls a PID controller that takes 100 samples per cycle
+
+    mpu.CalibrateGyro(calibration_cycles/100);
+
+   
+
+    mpu.PrintActiveOffsets(); //offsets now internally set, don't have to think about them anymore
+
+   
+
+ 
+
+  #else
+
+    Serial.println"Using MPU6050 LIGHT");
+
+    for(int i=0; i<calibration_cycles; i++){
+
+ 
+
+      /*
+
+       accelgyro.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+
+       gx_offset_found+=gx/8200;
+
+       gy_offset_found+=gy/8200;
+
+       gz_offset_found+=gz/8200;
+
+       ax_offset_found+=ax/16384;
+
+       ay_offset_found+=ay/16384;
+
+       az_offset_found+=az/16384;
+
+     
+
+      */
+
+     
+
+      mpu.getEvent(&a, &g, &temp);
+
+ 
+
+      gx_offset_found+=g.gyro.x;
+
+      gy_offset_found+=g.gyro.y;
+
+      gz_offset_found+=g.gyro.z;
+
+      ax_offset_found+=a.acceleration.x;
+
+      ay_offset_found+=a.acceleration.y;
+
+      az_offset_found+=a.acceleration.z;
+
+     
+
+    }
+
+ 
+
+  #endif
+
+  //int16_t ax, ay, az;
+
+  //int16_t gx, gy, gz;
+
+ 
+
+ 
+
+  Serial.println("Calibration complete. Set to vertical orientation NOW");
+
+ 
+
+  gx_offset=gx_offset_found/calibration_cycles;
+
+  gy_offset=gy_offset_found/calibration_cycles;
+
+  gz_offset=gz_offset_found/calibration_cycles;
+
+ 
+
+  ax_offset=ax_offset_found/calibration_cycles;
+
+  ay_offset=ay_offset_found/calibration_cycles;
+
+  az_offset=az_offset_found/calibration_cycles;
+
+ 
+
+  az_offset=az_offset-9.80665; //did the additional step to make az equal to gravity
+
+ 
+
+ 
+
+ 
+
+  /*
+
+   * Set listen_command to zero (start at zero) to tell website to not start until calibration is done
+
+   * Wait for 2 seconds until rover
+
+   * Take repeated measurements for some cycles to get g and a offsets
+
+   * Get avg of those offsets, which would be used to get rid of the offset
+
+   * Set listen_command to zero, which will allow website buttons to be pressed
+
+   *
+
+   * Person will get rover to vertical position
+
+   * Website presses begin button
+
+   * FIRST COMMAND IS STOP() TO GET VELOCITY TO ZERO
+
+   * SECOND COMAND IS MOVEFORWARD(), WHICH STARTS THE ROVER OPERATION
+
+   *
+
+   *
+
+   * FOR MOVEFORWARD STATE REMAINS SAME NO NEED FOR TIMING CONSTRAINTS
+
+   *
+
+   */
+
+ 
+
+ 
+
+}
+
+ 
+
+ 
+
+/*
+
+* Function Name: mpuSetup() control
+
+* Input: None
+
+* Output: None
+
+* Function: Calibrates MPU based on desired range mode
+
+*/
+
+void mpu_setup() {
+
+ 
+
+  #ifndef USE_MPU6050
+
+ 
+
+    mpu.setAccelerometerRange(MPU6050_RANGE_8_G);
+
+ 
+
+    mpu.setGyroRange(MPU6050_RANGE_500_DEG);
+
+ 
+
+    mpu.setFilterBandwidth(MPU6050_BAND_21_HZ);
+
+ 
+
+    mpu.setTemperatureStandby(true);
+
+ 
+
+  #endif
+
+ 
+
+  mpu_calibrate();
+
+ 
+
+}
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+//LIKE MPU_CALIBRATION BUT FOR YAW ONLY AND NOT CONTAIN MANY SAMPLES.
+
+//WHILE GIVEN INPUT IS ZERO COLLECT GX OR GY DATA BASED ON MODE, STOP COLLECTING AFTER NONZERO AND RECALIBRATE IF ENOUGH SAMPLES COLLECTED
+
+//DOESN'T GET RID OF BUILT UP ERROR AND ONLY DECREASES THE SLOPE WHICH WOULD INCREASE AGAIN
+
+//NEED TO CALL IN  LOOP() TO BE EFFECTIVE WHICH WON'T WORK WITH SLOW SENSORS (MAKE IT PART OF SENSE AND PUT FLAGS TO W_TURN OR HAVE 2 SENSORS (2 CHANNELS MIGHT EXIST BUT NOT SURE HOW TO SHARE PINS. LOOK IT UP IF NEEDED), ONE FOR LISTENING OTHER FOR COMPENSATION)
+
+//DEFINETELY NOT WORK WITH ADAFRUIT. NEED WORKING ELECTRONIC CAT LIBRARY OR MPU6050 LIGHT
+
+//Current choice: have mpu6050 library to compensate and reduce the slope. Either share mpu object (lead to max delay of a the sense time) OR HAVE 2 MPUs AND FIGURE OUT OTHER COMMUNICATION PINS
+
+ 
+
+//Might do compensation for pitch too if balancing is good.
+
+ 
+
+//updates the offset of the corresponsing yaw_rate giving gyroscope measurement IF NOT GIVING W_TURNS TO MOTORS FOR 20 SENSOR SAMPLES
+
+void compensate_yaw(float gx, float gz){
+
+ 
+
+  float zero_rate_value=is_vertical? gx:gz;
+
+  bool is_input_yaw_rate_zero = abs(w_turn*(wheel_radius/(rover_width*0.5)))<=0.03; //do compensation if we're not giving YAW RATE INPUT, not if sensed yaw rate is zero. NOT ACCURATE UNTIL COMPENSATED
+
+ 
+
+  if(doing_yaw_compensation){
+
+ 
+
+    if(is_input_yaw_rate_zero) { //if doing compensation and yaw rate stays zero
+
+ 
+
+      compensated_yaw_offset+=zero_rate_value;
+
+      yaw_compensation_samples++;
+
+     
+
+    }
+
+ 
+
+    else{ //if yaw rate goes nonzero while we're doing compensation. End of compensation
+
+ 
+
+      doing_yaw_compensation=false;
+
+      float* compansated_measurement=is_vertical ? &gx_offset : &gz_offset;
+
+ 
+
+      //Take compensation as successfull and accurate if we were able to get 20 samples while yaw_rate was zero
+
+      *compansated_measurement = yaw_compensation_samples>=20 ? compensated_yaw_offset/yaw_compensation_samples : *compansated_measurement;
+
+      yaw_compensation_samples=0;
+
+     
+
+    }
+
+   
+
+  }
+
+ 
+
+  else{
+
+ 
+
+    if(is_input_yaw_rate_zero){ //start compensation when zero yaw rate is detected
+
+ 
+
+      doing_yaw_compensation=true;
+
+     
+
+    }
+
+   
+
+  }
+
+ 
+
+}
+
+ 
+
+ 
+
+ 
+
+ 
+
+//A GENERAL SENSE FUNCTION THAT MEASURES ALL STATES BY ONLY 2 SAMPLES. COULD CHANGE WITH NEW MPU LIBRARY AS IT CAN TAKE INDIVIDUAL READINGS
+
+void sense(){ //do measurement only 2 times and use data to find pitch, yaw, and v all at the same time
+
+ 
+
+  state state_buffer;
+
+ 
+
+  #ifdef USE_MPU6050 //MPU6050 OPERATION
+
+ 
+
+    float runtime_start=micros()*0.000001;
+
+ 
+
+    if (!dmpReady) {
+
+      Serial.println("DMP NOT PRESENT");
+
+    }
+
+ 
+
+    else{  //buffer->current->prev. Current values calculated on buffer using current values (which would be prev). In state writing buffer is written to current and current is written to prev
+
+   
+
+      // read a packet from FIFO     WIRE LIBRARY AUTOMATICALLY HANDLES THE FIFO FILLING
+
+      if (mpu.dmpGetCurrentFIFOPacket(fifoBuffer)) { //like spi, data is received from mpu only when requested by microprocessor. collects the fused and processed sensor data
+
+   
+
+          //calculate pitch and yaw from quaternions (more complete picture of rotation from gyro and accel fused) and found gravity vector
+
+          mpu.dmpGetQuaternion(&q, fifoBuffer);
+
+          mpu.dmpGetGravity(&gravity, &q);
+
+          mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);  //add compensation by pitch if error
+
+   
+
+          //CHECK OPERATION IN TEST AND ADD OFFSETS TO COMPENSATE FOR HORIZONTAL VERCITAL DIFFERENCE   0 at 90  90 at 0    0 90 180->90 0 -90    90-x
+
+   
+
+          float sensitivity = 1.0;
+
+   
+
+          state_buffer.pitch = ((PI/2) - (is_vertical ? ypr[1] : ypr[1]) - is_vertical*pitch_offset) * sensitivity; //increase if mismatch
+
+          state_buffer.yaw = (is_vertical ? ypr[0] : ypr[0]) *  sensitivity;
+
+          //save roll too if want compensation????
+
+   
+
+          float dt=micros()*0.000001-sense_time;
+
+ 
+
+          sense_time=micros()*0.000001;
+
+   
+
+           //Find pitch and yaw rates indirectly from yaw and pitch changes since library not directly give rates. Would be indirectly accurate as yaw and pitch are accurate
+
+          //RATES ARE DELAYED BY ONE SENSE SAMPLES BECAUSE WE CAN ONLY FIND THE AVERAGE RATES BETWEEN CURRENT AND PREVIOUS MEASUREMENT (CAN'T SEE FUTURE)
+
+ 
+
+          //Right now, buffer has the state values of the sampled time point and states has the previous values
+
+         
+
+          state_buffer.pitch_rate = (state_buffer.pitch-states_current.pitch)/dt;
+
+          state_buffer.yaw_rate = (state_buffer.yaw-states_current.yaw)/dt;
+
+   
+
+          state_buffer.v = w * wheel_radius * slip_factor; //directly set by input so no need to stabilize
+
+          state_buffer.x = states_current.x+0.5*(state_buffer.v+states_current.v)*dt;
+
+ 
+
+ 
+
+          /*IMPLEMENT CALCULATED YAW TOO IN GOT FROM BEACON. OR WHEN GOT FROM BEACON JUST SET YAW TO THAT VALUE*/
+
+         
+
+          states_changing=true; //FLAG TO TELL DEAD RECKONING NOT TO READ THE BUFFER UNTIL READ IS COMPLETE /*Moving buffer values to current and current values to prev buffers*/
+
+          dead_states_changing=true;
+
+ 
+
+          memcpy(&states_prev, &states_current, sizeof(states_current));
+
+          memcpy(&states_current, &state_buffer, sizeof(states_current));
+
+          /*states_prev=states_current;
+
+          states_current = state_buffer; //PUT COPYING INTO A METHOD SO THAT METHOD COULD BE PUT TO A PRIORITY LIST*/
+
+          states_changing=false;
+
+          dead_states_changing=true;
+
+         
+
+          states_updated=true;
+
+ 
+
+//          Serial.println("pitch prev"); 
+
+//          Serial.println(states_prev.pitch*(360/(2*PI)));
+
+//          Serial.println("pitch_rate prev");
+
+//          Serial.println(states_prev.pitch_rate*(360/(2*PI)));
+
+//          Serial.println("yaw_rate prev");
+
+//          Serial.println(states_prev.yaw_rate*(360/(2*PI)));
+
+//          Serial.println("yaw prev");
+
+//          Serial.println(states_prev.yaw*(360/(2*PI)));
+
+         
+
+//          Serial.print("pitch: "); 
+
+//          Serial.println(states_current.pitch*(360/(2*PI)));
+
+//          Serial.println("pitch_rate");
+
+//          Serial.println(states_current.pitch_rate*(360/(2*PI)));
+
+//          Serial.println("yaw_rate");
+
+//          Serial.println(states_current.yaw_rate*(360/(2*PI)));
+
+//          Serial.println("yaw");
+
+//          Serial.println(states_current.yaw*(360/(2*PI)));
+
+ 
+
+      }
+
+     
+
+    }
+
+ 
+
+  #else  //MPU6050 LIGHT OPERATION
+
+ 
+
+    float dt_start=micros()*0.000001-sense_time; //one dt is that recorded in start, other is one recorded after one sampling time run
+
+    float dt=0;
+
+    float ax=0;
+
+    float ay=0;
+
+    float az=0;
+
+    float gx=0;
+
+    float gy=0;
+
+    float gz=0;
+
+    //velocity and distance are out of loop because v is directly given by w, which is not changed during sense period (ensured that)
+
+ 
+
+    //need stable pitch to measure yaw rate, so measure desired gyros first
+
+ 
+
+    //get accurate rate samples
+
+    for(int i=0; i<total_samples; i++){  //in future do only pitch_rate if would only do the FPGA based measurement (DOWNSIDE IS IT WOULD TAKE LONGER TIME TO DO DUE TO SERIAL)
+
+ 
+
+      mpu.getEvent(&a, &g, &temp); //will optimize in the future where only gyro or accelero is called at a time instead of measuring both at each call
+
+      dt+=(micros()*0.000001-sense_time);
+
+ 
+
+      ax+=a.acceleration.x-ax_offset;
+
+      ay+=a.acceleration.y-ay_offset;
+
+      az+=a.acceleration.z-az_offset;
+
+ 
+
+      gx+=g.gyro.x-gx_offset;
+
+      gy+=g.gyro.y-gy_offset;
+
+      gz+=g.gyro.z-gz_offset;
+
+ 
+
+    //  Serial.println("not calibrated");
+
+    //  Serial.println(((g.gyro.z)*(360/(2*PI))));
+
+    //  Serial.println(gz_offset*(360/(2*PI)));
+
+    //  Serial.println("calibrated");
+
+    //  Serial.println(((g.gyro.z-gz_offset)*(360/(2*PI))));
+
+ 
+
+      
+
+    }
+
+ 
+
+    float rate = is_vertical ? gy : -gy;
+
+ 
+
+    /*pitch rate*/
+
+    state_buffer.pitch_rate=((abs(rate/total_samples)>=0.03) ? rate/total_samples : 0); //Added hysteresis to prevent drift //VALUE IN RAD, TRANSMISSION AND INPUT IN DEGREES
+
+   
+
+    float hor= is_vertical ? ax : az;
+
+    float ver= is_vertical ? az : ax;            //relative vertical of the triangle whose acute angle gives the pitch
+
+    float acc_pitch = atan2(ver/total_samples, sqrt(pow(ay/total_samples,2) + pow(hor/total_samples,2)));
+
+    //ADD OFFSET TO GET PITCH FOR CENTER OF MASS INSTEAD FOR ACTUAL PITCH OF SENSOR
+
+    //SWITCHES X AND Z PLACES TO GET VERTICAL TO 0 AND HORIZONTAL TO 90
+
+    //Serial.print("acc pitch: ");
+
+    //Serial.println(acc_pitch*(360/(2*PI)));
+
+    float gyro_pitch = states_current.pitch + 0.5*(states.pitch_rate+state_buffer.pitch_rate) * dt/total_samples;    //IF GYRO IS USED ONLY, ONLY GOOD FOR DYNAMIC FORCE (ACCELERATION DIE OUT AND NOT INTERFERE WITH GRAVITY)
+
+    //Serial.print("gyro pitch: ");
+
+    //Serial.println(gyro_pitch*(360/(2*PI)));
+
+    state_buffer.pitch = ((1-complementary_weight) * gyro_pitch + complementary_weight * acc_pitch) - pitch_offset*is_vertical; //does it fix drift???. CHANGE WEIGHT TO REDUCE DRIFT OR DO COMPENSATION WHEN NEAR OFFSETTED ANGLE?
+
+   
+
+    float turn=(is_vertical? gx : gz) * (90.0/53.9);  //  QUICK FIX. ASK PROFESSOR TO GET BETTER CALCULATION. ALSO FIND YAW TO GET RID OF INTERFERENCE    //MY THEORY IS THAT VALUE LOW EITHER DUE TO INTERFERENCE OR LOW SENSITIVITY
+
+ 
+
+    state_buffer.yaw_rate=((abs((-turn/cos(states_buffer.pitch))/total_samples)>=0.03) ? (-turn/cos(states_buffer.pitch))/total_samples : 0);
+
+    //subtract by roll*sin(pitch) if can find roll. gx and gz detect roll and yaw TOGETHER and CAN'T RECTIFY THAT. Could find roll from accelerometer then rollrate from dt???
+
+    //roll interference and drift are the main protractors of accurate yaw measurement. MEASURE ROLL INTERFERENCE TOO SOMEHOW???
+
+    //NEED TO DO PITCH SENSE BEFORE DOING YAW SENSE->TOGETHER. Also do velocity together as it's a quick measurement
+
+        
+
+    states_buffer.yaw = state_current.yaw + 0.5*(states_buffer.yaw_rate+states_current.yaw_rate) * dt; //Removed %360 to stop wrapping. The SENDER NEEDS TO WRAP IN TURN AND WE NEED TO SCALE THE INPUT
+
+    //If can do beacon detection change it to detect yaw from beacon that comes from laptop. Save laptop data to a register and set flag high when value at buffer updated
+
+   
+
+  
+
+    state_buffer.v = w * wheel_radius * slip_factor; //directly set by input so no need to stabilize
+
+    state_buffer.x = states_current.x+0.5*(state_buffer.v+states_prev.v)*dt;
+
+ 
+
+    states_changing=true; //FLAG TO TELL DEAD RECKONING NOT TO READ THE BUFFER UNTIL READ IS COMPLETE /*Moving buffer values to current and current values to prev buffers*/
+
+    states_prev=states_current;
+
+    states_current = state_buffer;; //PUT COPYING INTO A METHOD SO THAT METHOD COULD BE PUT TO A PRIORITY LIST
+
+    states_changing=false;
+
+    states_updated=true;
+
+    states_updated=true;
+
+ 
+
+//    Serial.println("yaw_rate");
+
+//    Serial.println(states_current.yaw_rate*(360/(2*PI)));
+
+    //  Serial.println("yaw_rate_desired");
+
+    //  Serial.println(yaw_rate_stat_normal*(360/(2*PI)));
+
+    //  Serial.println("yaw");
+
+    //  Serial.println(states_current.yaw*(360/(2*PI)));
+
+   
+
+      /*DID QUICK FIX. DO ACTUAL FIX LATER*/
+
+    //  Serial.println("pitch");
+
+    //  Serial.println(states_current.pitch);   
+
+    //  Serial.println(states_current.pitch*(360/(2*PI)));
+
+    //  Serial.println("pitch_rate");
+
+    //  Serial.println(states_current.pitch_rate*(360/(2*PI)));
+
+    //  Serial.println("yaw_rate");
+
+    //  Serial.println(states_current.yaw_rate*(360/(2*PI)));
+
+    //  Serial.println("yaw");
+
+    //  Serial.println(states_current.yaw*(360/(2*PI))); //CHECK IF SENSOR IS CALLED IN TRIAL
+
+ 
+
+ 
+
+  #endif
+
+ 
+
+}
+
+ 
+
+ 
+
+ 
+
+ 
+
+/*CONTROLLERS*/
+
+ 
+
+//NEED TO CONTINUOUSLY CALL UPDATES() FOR CONTROLLER TO UPDATE RESPONSE. FOR BOTH PID AND LQR. Is there a way to continuously run them in the background???
+
+ 
+
+//NOT FINISHED YET. IRON OUT IMPLEMENTATION HICCUPS
+
+ 
+
+void set_velocity(float vd){
+
+ 
+
+  v_desired = limit_max_v ? (vd>=0.375 ? 0.375 : vd) : vd;
+
+ 
+
+  //SET_VELOCITY IS A COMMAND SEND BY LAPTOP
+
+ 
+
+}
+
+ 
+
+//Have basic constants so start testing. More overshoot a state does increase its cost
+
+ 
+
+ 
+
+void update_velocity(){ //vd=v, x can change
+
+ 
+
+  //DO THE CONTROLLER STUFF THERE
+
+  /*
+
+   * get feedback from sensors
+
+   * scale them with optimal gain coefficients to get actual input to subtract from.
+
+   * apply new input to system by setting new w_desired (w_rate_desired for turns
+
+   * run the motor updater code (the code only does steps if time range set by w inputs is exceeded)
+
+   *
+
+   */
+
+ 
+
+   //x v pitch and pitchrate are updated
+
+ 
+
+ 
+
+   //FIND W UPDATE THEN CALMLUPDATE WHEEL SPEEDS TO GIVE RESPONSE. WOULD ALSO UPDATE TURN AND BALANCING IF NECESSARY
+
+   float timeout_time=micros()*0.000001;
+
+   while(states_changing && micros()*0.000001-timeout_time<sense_runtime*3){} //wait if buffer is changing
+
+  
+
+   float w_feed = is_vertical ? -(k[0]*(v_desired-states_current.v)-k[1]*states_current.pitch-k[2]*states_current.pitch_rate) : v_desired/wheel_radius;
+
+ 
+
+   set_wheel_speeds(w_feed, w_turn);
+
+ 
+
+  
+
+  
+
+}
+
+ 
+
+void set_distance(float x_d){
+
+ 
+
+   x_desired=x_d;
+
+ 
+
+   //SET DISTANCE IS A COMMAND SEND BY LAPTOP
+
+ 
+
+}
+
+ 
+
+ 
+
+ 
+
+void update_distance() { //yaw_d=yaw, yaw_rate can change
+
+ 
+
+  float timeout_time=micros()*0.000001;
+
+  while(states_changing && micros()*0.000001-timeout_time<sense_runtime*3){} //wait if buffer is changing
+
+ 
+
+  float error=x_desired-states_current.x;
+
+ 
+
+  float new_v=kp_x*error; //PID OUTPUT
+
+  set_velocity(new_v);
+
+  update_velocity_yaw_rate();
+
+ 
+
+}
+
+ 
+
+ 
+
+ 
+
+void set_yaw_rate(float rate_d){ //yaw_rate_d=yaw_rate, desired_yaw not used
+
+ 
+
+  yaw_rate_desired = limit_max_yaw_rate ? (rate_d>=PI ? PI : rate_d) : rate_d;
+
+  //implement velocity controller here, will set w and yaw rate desired at the end
+
+ 
+
+}
+
+ 
+
+void update_yaw_rate() { //yaw_d=yaw, desired_yaw_rate can change
+
+ 
+
+  //check if dt is accurate
+
+ 
+
+  float dt=micros()*0.000001-yaw_rate_pid_time;
+
+ 
+
+  float error=yaw_rate_desired-states_current.yaw_rate;
+
+  yaw_rate_cum_error+=error*dt; //integration of error
+
+ 
+
+  //Not use states so no need to wait for sensor buffer
+
+ 
+
+  float w_feed= is_vertical ? ki*yaw_rate_cum_error : yaw_rate_desired * ((rover_width*0.5)/wheel_radius); //PID OUTPUT  //minus sign put to account for direction differences of the motors
+
+ 
+
+  set_wheel_speeds(w, w_feed);
+
+ 
+
+  yaw_rate_pid_time=micros()*0.000001;
+
+ 
+
+  //Used an I controller because closed loop response was GR/(1+GR) where G was a constant. It gave response (G*ki)/(s+G*ki), so ki can directly control bandwidth.
+
+ 
+
+}
+
+ 
+
+ 
+
+void set_yaw(float yaw_d){ //Assume given yaw is in rev 0. Offset the given yaw input to the rev that makes the difference between yaw and it the smallest
+
+ 
+
+  float timeout_time=micros()*0.000001;
+
+  while(states_changing && micros()*0.000001-timeout_time<sense_runtime*3){} //wait if buffer is changing
+
+ 
+
+  int rev=states_current.yaw/(2*PI) + !sgn(states_current.yaw)*(-1); //get the revolution yaw value is at. Pass 360 you get one rotation pass 0 you lose one rotation    -360 : -1 -1 | 0 : 359  0 | 360 : 719 1
+
+ 
+
+  //chose rev rev-1 or rev+1 based on closest
+
+ 
+
+  int offset=0;
+
+ 
+
+  float mag_yaw_difference=abs((yaw_d+2*PI*rev)-states_current.yaw);
+
+ 
+
+  if(abs((yaw_d+2*PI*(rev+1))-states_current.yaw)>=mag_yaw_difference){
+
+ 
+
+    mag_yaw_difference=abs(yaw_d*(rev+1)-states_current.yaw);
+
+    offset=1;
+
+   
+
+  }
+
+ 
+
+  if(abs((yaw_d+2*PI*(rev-1))-states_current.yaw)>=mag_yaw_difference){
+
+ 
+
+    mag_yaw_difference=abs(yaw_d*(rev-1)-states_current.yaw);
+
+    offset=-1;
+
+   
+
+  } //TWIST TURNS DIRECTIONS FOR HORIZONTAL MODE
+
+ 
+
+ 
+
+   yaw_desired=yaw_d+2*PI*(rev+offset); //input is scaled by the amount of full turns the rover already did from the start.
+
+ 
+
+   //IS A COMMAND SENT BY LAPTOP, BUT WOULD GET DEGREES DATA THAT HASN'T BEEN UNWRAPPED. CONVERT TO RADS FIRST THEN GIVE TO SET_YAW TO BE UNWRAPPED OPTIMALLY
+
+ 
+
+}
+
+ 
+
+float error_prev=0;
+
+ 
+
+void update_yaw(){ //yaw_d=yaw, desired_yaw_rate can change
+
+ 
+
+  float timeout_time=micros()*0.000001;
+
+  while(states_changing && micros()*0.000001-timeout_time<sense_runtime*3){} //wait if buffer is changing
+
+ 
+
+  float error=yaw_desired-states_current.yaw;
+
+ 
+
+  float new_yaw_rate=kp_yaw*error; //PID OUTPUT
+
+  set_yaw_rate(new_yaw_rate);
+
+  update_velocity_yaw_rate();
+
+ 
+
+}
+
+ 
+
+//UPDATER
+
+ 
+
+//DOES VELOCITY AND YAW RATE SETTING CONCURRENTLY
+
+void update_velocity_yaw_rate(){
+
+ 
+
+ 
+
+ 
+
+  /*WAIT FOR STATES TO UPDATE*/
+
+   float timeout_time=micros()*0.000001;
+
+   while(states_changing && micros()*0.000001-timeout_time<2.5*0.001){Serial.println("WAIT FOR SENSOR");} //wait if buffer is changing
+
+ 
+
+ 
+
+  /*VELOCITY*/
+
+  //FIND W UPDATE THEN CALLUPDATE WHEEL SPEEDS TO GIVE RESPONSE. WOULD ALSO UPDATE TURN AND BALANCING IF NECESSARY
+
+ 
+
+   //AUTOSTOP THE WHEEL IF PITCH GETS TOO HIGH
+
+   float w_lin_feed = is_vertical ? (-(k[0]*(v_desired-states_current.v)-k[1]*states_current.pitch-k[2]*(states_current.pitch_rate < 0.6*((2*PI)/360) ? 0 : states_current.yaw_rate)))*(abs(states_current.pitch)*(360/(2*PI))<=60) : v_desired/wheel_radius;
+
+ 
+
+//   Serial.print("w_lin_feed: ");
+
+//   Serial.println(w_lin_feed);
+
+ 
+
+   //if w_lin_feed lower than certain value (w_min/2.2) call calibrate pitch with more averaging???
+
+ 
+
+  /*YAW RATE*/ //if bad call integrator throughout operation
+
+ 
+
+ 
+
+  float error=yaw_rate_desired-(states_current.yaw_rate*(360/(2*PI)) < 6.0 ? 0 : states_current.yaw_rate); //ERROR IN YAW RATE IS AMPLIFIED A LOT SO FILTER INSIGNIFICANT TURNS
+
+ 
+
+ 
+
+  yaw_rate_cum_error+=(error+error_prev)*0.5*(micros()*0.000001-yaw_rate_pid_time); //integration of error
+
+  error_prev=error;
+
+ 
+
+//  Serial.println("cum_error");
+
+//  Serial.println(yaw_rate_cum_error);
+
+ 
+
+  //Not use states so no need to wait for sensor buffer
+
+ 
+
+//    Serial.println("Yaw rate Desired");
+
+//   Serial.println(yaw_rate_desired);
+
+ 
+
+  float w_rot_feed= is_vertical ? (ki*yaw_rate_cum_error*(abs(states_current.pitch)*(360/(2*PI))<=60)) : yaw_rate_desired * ((rover_width*0.5)/wheel_radius); //PID OUTPUT  //minus sign put to account for direction differences of the motors
+
+ 
+
+//   Serial.println("w_rot_feed");
+
+//   Serial.println(w_rot_feed);
+
+ 
+
+w_rot_feed=0; //ERROR ADD IN PID. EITHER CHANGE, LIMIT WMIN ACCORDINGLY, OR USE OPEN LOOP FOR YAW RATE CONTROL
+
+ 
+
+  set_wheel_speeds(w_lin_feed, w_rot_feed);
+
+ 
+
+  yaw_rate_pid_time=micros()*0.000001;
+
+ 
+
+  //Used an I controller because closed loop response was GR/(1+GR) where G was a constant. It gave response (G*ki)/(s+G*ki), so ki can directly control bandwidth
+
+ 
+
+}
+
+ 
+
+ 
+
+//W ACCEL FLAG HERE
+
+bool step_period=false; //true: accelerate by stepping period, false: accelerate by stepping w
+
+ 
+
+ 
+
+ 
+
+void cap_w(float w_in, float w_turn_in, float* lp, float* rp){ //determine w cap first, then cap w_turn based on w
+
+ 
+
+//  Serial.println("w_in");
+
+//  Serial.println(w_in);
+
+//  Serial.println("w_turn_in");
+
+//  Serial.println(w_turn_in);
+
+ 
+
+ 
+
+  float w_mag = abs(w_in);
+
+  float w_turn_mag=abs(w_turn_in);
+
+ 
+
+  float w_chosen;
+
+  float w_turn_chosen;
+
+ 
+
+  float deadzone=0.5; //wheel speed not become zero
+
+ 
+
+  if(w_mag>=w_max){
+
+ 
+
+    w_chosen = (-1+2*sgn(w_in))*w_max;
+
+  }
+
+  else if (w_mag<=w_min){ //lim was 0.5
+
+   
+
+    w_chosen =  (w_mag<w_min*deadzone) ? 0 : (w_min*(-1+2*sgn(w_in))); //for the section lower than w_min, set right of section to w_min and left to zero to minimize error
+
+   
+
+  }
+
+  else{
+
+    w_chosen=w_in;
+
+ 
+
+  }
+
+ 
+
+//  Serial.println("w_chosen");
+
+//  Serial.println(w_chosen);
+
+ 
+
+ 
+
+  //if w+w_turn hit max, limit w_turn to until max
+
+ 
+
+ 
+
+ 
+
+  float w_chosen_mag=abs(w_chosen);
+
+ 
+
+  if(w_chosen_mag<=0.005){
+
+ 
+
+    if(w_turn_mag>=w_max){
+
+     
+
+      w_turn_chosen = (-1+2*sgn(w_turn_in))*w_max;
+
+     
+
+    }
+
+   
+
+    else if (w_turn_mag<=w_min){ //lim was 0.5
+
+   
+
+      w_turn_chosen =  (w_turn_mag<w_min*deadzone) ? 0 : (w_min*(-1+2*sgn(w_turn_in))); //for the section lower than w_min, set right of section to w_min and left to zero to minimize error
+
+   
+
+    }
+
+   
+
+    else{
+
+     
+
+      w_turn_chosen=w_turn_in;
+
+ 
+
+    }
+
+   
+
+  }
+
+ 
+
+  else if (w_chosen_mag>=w_min || w_chosen_mag<=w_max){
+
+ 
+
+    float turn_max= w_chosen_mag<0.5*(w_max+w_min) ? w_chosen_mag-w_min : w_max-w_chosen_mag; //maximum range of turn wheel speed that's determined by the chosen linear wheel speed;
+
+ 
+
+    w_turn_chosen= (-1+2*sgn(w_turn_in)) * (w_turn_mag>=turn_max ? turn_max :  w_turn_mag);
+
+ 
+
+   
+
+  }
+
+ 
+
+  else{
+
+ 
+
+    w_turn_chosen=0;
+
+   
+
+  }
+
+ 
+
+//  Serial.print("w_turn_chosen: ");
+
+//  Serial.println(w_turn_chosen);
+
+ 
+
+ 
+
+  *lp=w_chosen+w_turn_chosen;
+
+  *rp=w_chosen-w_turn_chosen;
+
+ 
+
+//    Serial.print("w_right: ");
+
+//    Serial.println(*rp);
+
+//    Serial.print("w_left: ");
+
+//    Serial.println(*lp);
+
+  
+
+}
+
+ 
+
+ 
+
+//4*5118*10^-6=0.020472 s.  pi/20=0.157 s     ->0.0887758 s->88.776 ms       
+
+ 
+
+ 
+
+ 
+
+ 
+
+//Set the input change of motors. Set to the period of the motor which is the longest (eg. if have speeds r=2 and l=4, have period as 1/2 (choose r))
+
+ 
+
+void one_step(float* w, float w_d, float* stp, float stp_d){
+
+ 
+
+//  Serial.println("goal");
+
+//  Serial.println(w_d);
+
+//  Serial.println("current");
+
+//  Serial.println(*w);
+
+ 
+
+  float stp_value=*stp;
+
+  float w_value=*w;
+
+  bool is_goal_zero=abs(w_d)<w_min/2.2;
+
+  bool is_current_zero=abs(*w)<w_min/2.2;
+
+ 
+
+  float period_change=0;
+
+ 
+
+  if(is_current_zero){ //current w is zero and either moving to + or - range, or staying at zero
+
+ 
+
+//    Serial.println("at zero");
+
+    *w = is_goal_zero ? 0 : (-1+2*sgn(w_d))*w_min;
+
+    *stp=max_period;
+
+    
+
+  }
+
+ 
+
+  else if(is_goal_zero || sgn(*w)!=sgn(w_d)){ //if goal is zero or a different sign that current. Move towards 15000 w=0. w=w_min case done by other path
+
+//
+
+//    Serial.println("moving towards zero");
+
+ 
+
+    float diff=step_period ? max_period-stp_value : abs(w_value)-abs(w_min);
+
+ 
+
+//        Serial.print("diff: ");
+
+//    Serial.println(diff);
+
+ 
+
+    if( step_period ? abs(diff)>max_step_period_change  : abs(diff)>w_step ) {
+
+ 
+
+//      Serial.println("more than max step");
+
+ 
+
+ 
+
+      float w_stepped_value = w_value+w_step*( -1 + 2*!sgn(w_value) ); //decrease if + increase if -
+
+      float stepped_period_value = stp_value+max_step_period_change;
+
+      *stp=step_period    ?   stepped_period_value   :   abs((2*PI)/(steps_per_revolution*abs(w_stepped_value))); //stp_value+max_step_period_change*(-1+2*sgn(diff));    2pi/(stepperrev*period)=w->period=2pi/(stepperrev*w)
+
+      *w = step_period    ?   ((2*PI)/(steps_per_revolution*stepped_period_value))*(-1+2*sgn(w_value)) : w_stepped_value;
+
+     
+
+    }
+
+   
+
+    else{ //lower than 900 so round to max_period (w become zero
+
+ 
+
+//      Serial.println("set to zero");
+
+ 
+
+     *stp=max_period;
+
+      *w=0;
+
+     
+
+    }
+
+   
+
+  }
+
+ 
+
+  else{ //none of the w's is zero and they have the same direction
+
+ 
+
+//    Serial.println("Same direction");
+
+ 
+
+    float diff=step_period ? stp_d-stp_value : abs(w_d)-abs(w_value);
+
+ 
+
+//        Serial.print("diff: ");
+
+//    Serial.println(diff);
+
+ 
+
+    if(step_period ? abs(diff)>=max_step_period_change : abs(diff)>=w_step){
+
+ 
+
+//      Serial.println("more than max step");
+
+ 
+
+ 
+
+      float w_stepped_value = (abs(w_value) + w_step*(-1+2*sgn(diff)))*(-1+2*sgn(w_value)); 
+
+      float stepped_period_value = stp_value+max_step_period_change*(-1+2*sgn(diff));
+
+      *stp = step_period   ?   stepped_period_value   :   abs((2*PI)/(steps_per_revolution*abs(w_stepped_value))); //+-period step based on difference sign
+
+      *w = step_period   ?   ((2*PI)/(steps_per_revolution*stepped_period_value))*(-1+2*sgn(w_value))   :   w_stepped_value;
+
+     
+
+    }
+
+   
+
+    else{ //lower than 900 so round to max_period (w become zero
+
+ 
+
+//      Serial.println("less than max step");
+
+ 
+
+      *stp=stp_d;
+
+      *w=w_d;
+
+     
+
+    }
+
+   
+
+  }
+
+ 
+
+//  Serial.println("new period");
+
+//  Serial.println(*stp*1000000);
+
+//  Serial.println("new w");
+
+//  Serial.println(*w);
+
+ 
+
+}
+
+ 
+
+ 
+
+//Sets the desired w inputs and turns them into implementable (capped) right and left motor wheel speed goals
+
+void set_wheel_speeds(float wd, float w_turnd){  //w_turn offset should remain the same for right and left motors  CHANGE TO SET WHEEL SPEEDS
+
+ 
+
+//  Serial.println("updating wheel speeds");
+
+ 
+
+  //MIN IS 4.2,MAX IS 13.4
+
+  //Need to limit w s there.
+
+ 
+
+  //ASSUME WITHIN GOOD OPERATION LIMITS
+
+  //need to set left and right seperately
+
+ 
+
+//add when moving in + direction, left mag needs to be higher for clockwise turn
+
+//for - direction turning, to get clockwise rotation, left mag needs to be lower. ----->add w and w_turn with their signs then abs()
+
+  w_desired=wd; //cap w_desired variables too??
+
+  w_turn_desired=w_turnd; //w turn is offset to w that allows rotation at w_turn to occur in parallel with the linear velocity response
+
+    
+
+   //MAX INCORRECT
+
+ 
+
+ 
+
+  //CHECK CAPPING
+
+  cap_w(w_desired,w_turn_desired,&w_left_desired, &w_right_desired);  //Sets the DESIRED velocities of right and left motor based on the existing input limits
+
+  //ALSO CAP W_DESIRED AND W_DESIRED BASED ON CAPPED LEFT AND RIGHT???
+
+  left_step_period_desired = (abs(w_left_desired)<w_min/2.2) ? max_period : (2*PI)/(steps_per_revolution*abs(w_left_desired));  //if w set was zero, period would be infinite, which would block the code. WHEN W IS ZERO CAN CHANGE W ANY TIME
+
+  right_step_period_desired = (abs(w_right_desired)<w_min/2.2) ? max_period: (2*PI)/(steps_per_revolution*abs(w_right_desired)); //didn't remove sign as while changing the period with step need sign to tell direction and also allow neg to pos step movement
+
+ 
+
+//Make zero's period same as period max to allow similar clock step in turn_motor. RIGHT NOW ASSUME W_MAX TO 0 ACCELERATION CAN BE DONE WITHOUT JITTER. Just make sure no step is done during zero
+
+//Zero is special case, always keep toggle on to ensure changes can come but not call stepper. Call turn motor but only call turnmotor to change period. If desired is zero then keep toggle period zero.
+
+ 
+
+//increase in steps of step_period_change then toggle until clock of desired + 5 clocks have passed (change clock)
+
+ 
+
+  //choose based on largest period step not by largest period. if close can do in one step as steprates are similar so acceleration is low
+
+ 
+
+//  Serial.println("w right chosen");
+
+//  Serial.println(w_right_desired);
+
+//  Serial.println("w left chosen");
+
+//  Serial.println(w_left_desired);
+
+ 
+
+ 
+
+ 
+
+ 
+
+/*CONSTANT STEP ACCELEATION*/
+
+ 
+
+ 
+
+ 
+
+  int cycles_right;
+
+ 
+
+ 
+
+//if one of the w's is zero, and if none are, have the same sign
+
+  if( (abs(w_right_desired)<w_min/2.2) || (abs(w_right)<w_min/2.2) || sgn(w_right)==sgn(w_right_desired) ){
+
+ 
+
+    if(step_period)
+
+      cycles_right=(int)(abs(right_step_period_desired-right_step_period)/max_step_period_change) + steady_cycles; // for 500 to 700 operation periods are 500 700*steady (500 done at start to compute +900 or <900 step or to zero step)
+
+ 
+
+    else
+
+      cycles_right=(int)(abs(abs(w_right)-abs(w_right_desired))/w_step) + steady_cycles;
+
+ 
+
+                           
+
+//0 to 1 rad->get to 15000 and decrease below to 5000
+
+//1 to 0 rad->go near 15000 from 5000 then switch to zero
+
+ 
+
+//increment if slowing down, decrement if speeding up->decrement when period difference is negative (fast) increment when positive (slow)
+
+//decide on direction in turn_motor
+
+ 
+
+  }
+
+ 
+
+//14800->15000 (for same sign) or 14800->0 (for to zero or differing sign). If passing to zero, next shift is zero when higher than max-step
+
+ 
+
+ 
+
+ 
+
+//if non of the w's are zero and have different signs
+
+  else{
+
+ 
+
+  //add up changes from current to zero and zero to desired //ceil adds the cycle of 15000 that arise from 0->15000 switch
+
+    if(step_period)
+
+      cycles_right=(int)(abs(max_period-right_step_period)/max_step_period_change) + 1 + ceil(abs(right_step_period_desired-max_period)/max_step_period_change) + steady_cycles; //for 13900 to -13900) 13900 14800 0 | 15000 14100 13900*steady
+
+    
+
+    else
+
+      cycles_right=(int)((abs(w_right)-abs(w_min))/w_step) + 1 + ceil((abs(w_right_desired)-abs(w_min))/w_step) + 1 + steady_cycles;
+
+                                                                      // ceil(difference/step) + 1 (for zero) + ceil(difference from max/step) + desired*steady                   
+
+  }
+
+ 
+
+ 
+
+ 
+
+  int cycles_left; //same logic as half_cycles_right
+
+ 
+
+ 
+
+  if( (abs(w_left_desired)<w_min/2.2) || (abs(w_left)<w_min/2.2) || sgn(w_left)==sgn(w_left_desired) ){
+
+ 
+
+    if(step_period)
+
+      cycles_left=(int)(abs(left_step_period_desired-left_step_period)/max_step_period_change) + steady_cycles;
+
+    else
+
+      cycles_left=(int)(abs(abs(w_left_desired)-abs(w_left))/w_step) + steady_cycles;
+
+ 
+
+  }
+
+ 
+
+  else{
+
+ 
+
+    if(step_period)
+
+      cycles_left=(int)(abs(max_period-left_step_period)/max_step_period_change) + 1 + ceil(abs(left_step_period_desired-max_period)/max_step_period_change) + steady_cycles;
+
+    else
+
+      cycles_left=(int)(abs(abs(w_min)-abs(w_left))/w_step) + 1 + ceil(abs(abs(w_min)-abs(w_left_desired))/w_step) + 1 + steady_cycles;
+
+ 
+
+  }
+
+ 
+
+ 
+
+  right_largest=cycles_right>cycles_left; //if equal left determines switching
+
+  cycles = (right_largest ? cycles_right : cycles_left);
+
+ 
+
+//  Serial.println("cycles chosen");
+
+//  Serial.println(cycles);
+
+ 
+
+  /*CONSTANT LINEAR ACCELEATION*/
+
+ 
+
+ 
+
+ 
+
+  //zero gives correct number of cycles but stepping wrong
+
+ 
+
+  //step periods once to get motors on first period
+
+ 
+
+  one_step(&w_left, w_left_desired, &left_step_period, left_step_period_desired);
+
+  one_step(&w_right, w_right_desired, &right_step_period, right_step_period_desired);
+
+ 
+
+  w=(w_left+w_right)*0.5;
+
+  w_turn=w_left-w;
+
+ 
+
+  /*ADD PITCH PROTECTION TO TURN_MOTOR WITH TIME CALIBRATION TOO*/
+
+ 
+
+  float current_time=micros()*0.000001;
+
+  right_step_time=current_time;
+
+  left_step_time=current_time;
+
+ 
+
+  //toggle done based on completion of largest step. sensor done for synced faster signal->automatically the nonzero one. NOT DO SENSOR UPDATE BASED ON LARGEST_RIGHT AS IT GIVES THE MOTOR WITH LARGEST STEP. DO ACCORDING TO THE SHORTEST CURRENT PERIOD
+
+  
+
+} //After very low speeds the continuous assumption of motor fails. THUS WE NEEDS TO HAVE DEADZONE FOR TOO LOW FREQUENCY AND NOT USE LOCAL PERIOD TO DEFINE LOCAL CONTINUOUS SPEED.
+
+  //As a result, distortion caused by the section where w is set to zero has no effect
+
+ 
+
+//turn motor right_slowest
+
+ 
+
+//accelerates w's to desired w's while also doing the stepping of the motor. Difference from previous motor updater is that periods can be changed based on desired input
+
+void turn_motor(){ //offset does the turn. positive for clockwise turns  //change dir based on sign. Fowward for positive  Would bypass w=0 because we can't implement it due to min_period limits (0 means infinite delay)
+
+ 
+
+  //CHANGE PERIOD ONLY ON ZERO STATE
+
+ 
+
+  float current_time=micros()*0.000001; //1) make state change based on duty, 2) give direction turn switching with zero bypass 3) sensor would use the smallest one 4)implement a turn_motor_off: set w to zero and period inf when off. When on set w to w_min and period no finite number
+
+  bool is_left_zero=abs(w_left)<w_min/2.2;
+
+  bool is_right_zero=abs(w_right)<w_min/2.2;
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+  //toggle state if the current duty of the left step signal passes. If left is zero, duty is fixed to one, resulting in toggle period being the complete period of zero
+
+  if( (current_time-left_step_time) >= ( left_step_period * ( 1 - ( duty_cycle+left_state*(1-2*duty_cycle) ) *!is_left_zero ) - left_time_shift) ){ //( (current_time-left_step_time) >= ( left_step_period * ( 1-duty_cycle+left_state*(-1+2*duty_cycle) ) * !is_left_zero ) ) { //CAN SKIP STEPS. NOT SEND UPDATES TOO FAST, MAKE W STEPS TOO HIGH
+
+ 
+
+    digitalWrite(left_dir_pin, sgn(w_left)); //HIGH IS FORWARD //PROBLEM FOR LOW SPEEDS; WHEN W IS ZERO SAME SGN RESPONSE GIVEN BUT WE WANT SIGNS TO BE DIFFERENT
+
+   
+
+    left_state = is_left_zero ? HIGH : !left_state; //Not do step if w is zero
+
+    digitalWrite(left_step_pin, left_state); //make 50% duty cycle if duuty seems too small. TOO SMALL AND PULSES NOT HAVE ENOUGH TIME TO RISE TO HIGH STATE. TURN TO 50% DUTY CYCLE
+
+    //Either minimum cycle method or slow rise method (how slow and accurate???)
+
+ 
+
+    //DONE BEFORE W IS UPDATED AND AFTER STEP IS DONE: REDUCE THE CYCLE FROM THE PREVIOUS W
+
+    cycles=cycles-(is_left_zero ? 1 : left_state)*!right_largest;    //remove one if the signal is the one half_cycles uses, subtract another one if previous w was zero (account for zero having no negative part)
+
+    //Didn't removed the period of zeros to have a complete picture readable in code
+
+ 
+
+   
+
+ 
+
+    //change period if had 2 half cycles passed (went to high or on high) and not reached desired yet
+
+    if(abs(w_left-w_left_desired)>=75*0.000001 && left_state){
+
+ 
+
+      one_step(&w_left, w_left_desired, &left_step_period, left_step_period_desired); //do one step towards the desired period. one_step will determine correct direction & amount & set w accordingly.
+
+      Serial.println(w_left);
+
+    }
+
+ 
+
+    left_time_shift=0; //set time shift to zero so only first cycle does it. Would only set to zero and not preserve value when the slowest period switches
+
+    left_step_time=micros()*0.000001;
+
+    
+
+  }
+
+ 
+
+  //ZERO LOGIC INCORRECT. Run the same step period as w_min for zero, but close the enable of motors
+
+ 
+
+  if( (current_time-right_step_time) >= ( right_step_period * ( 1 - ( duty_cycle + right_state*(1-2*duty_cycle) ) * !is_right_zero ) - right_time_shift) ) {  //duty for positive part, 1-duty for negative part. Still enter conditional for zero to reduce cycle
+
+ 
+
+    digitalWrite(right_dir_pin, !sgn(w_right));
+
+ 
+
+ 
+
+    //disable motors if speed is zero
+
+ 
+
+    right_state = is_right_zero ? HIGH : !right_state; //switched pulse to high when
+
+    digitalWrite(right_step_pin, right_state);
+
+ 
+
+    cycles=cycles-(is_right_zero ? 1 : right_state)*right_largest;
+
+ 
+
+     //change period is period not within 75 us of desired period
+
+    if(abs(w_right-w_right_desired)>=75*0.000001 && right_state){ //NEED TO ENSURE WRAP AROUND BEFORE IT'S OK (TO CHANGE DIRECTION GO TOWARDS 15000 FIRST THEN WRAP TO 0 THEN -15000 AND CONTINUE INCREASING)
+
+      
+
+      one_step(&w_right, w_right_desired, &right_step_period, right_step_period_desired);
+
+   
+
+    }
+
+ 
+
+ 
+
+    right_time_shift = 0; //set time shift to zero so only first cycle does it. Would only set to zero and not preserve value when the slowest period switches
+
+ 
+
+    right_step_time=micros()*0.000001;
+
+   
+
+  }
+
+ 
+
+ 
+
+//SETTING PERIODS CORRECTLY. GET RID OF SET PIN TO ZERO 
+
+  
+
+}
+
+ 
+
+void toggle_state(){
+
+ 
+
+  listen_command=!listen_command;
+
+ 
+
+}
+
+ 
+
+void crash(){}
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+ 
+
+//The commands rover will send is done, busy, and need_help. Busy when its performing task or doing critical task like crash fixing. Become available after task is done, and will send need_help after moving away from wall to get laptop to help it refind a path
+
+ 
+
+void setup() {
+
+    #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE  //ALSO HAVE FASTWIRE LIBRARY?
+
+        Wire.begin();
+
+        Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
+
+    #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
+
+        Fastwire::setup(400, true);
+
+    #endif
+
+ 
+
+  Serial.begin(115200);
+
+ 
+
+  pinMode(left_step_pin, OUTPUT);
+
+  pinMode(left_dir_pin, OUTPUT);
+
+  pinMode(right_step_pin, OUTPUT);
+
+  pinMode(right_dir_pin, OUTPUT);
+
+  pinMode(debug, OUTPUT);
+
+ 
+
+ 
+
+/*START OF MPU+DMP STARTUP*/
+
+ 
+
+  // Try to initialize!   !mpu.begin()
+
+//  if (!mpu.begin()) {
+
+//    Serial.println("Failed to find MPU6050 chip");
+
+//    while (1) {
+
+//      delay(10);
+
+//    }
+
+//  }
+
+//  Serial.println("MPU6050 Found!");
+
+ 
+
+  //startup connection library?
+
+  Serial.println(F("Initializing I2C devices..."));
+
+  mpu.initialize();
+
+ 
+
+  //make sure mpu is connected
+
+  Serial.println(F("Testing device connections..."));
+
+  if (!mpu.testConnection() ) {
+
+    Serial.println("Failed to find MPU6050 chip");
+
+   
+
+    while (1) {
+
+      delay(10);
+
+    }
+
+   
+
+  }
+
+  Serial.println("MPU6050 Found!");
+
+ 
+
+  // load and configure the DMP
+
+  Serial.println(F("Initializing DMP..."));
+
+ 
+
+  devStatus=mpu.dmpInitialize();
+
+ 
+
+  if (mpu.dmpInitialize() != 0) {
+
+    Serial.print(F("DMP Initialization failed (code "));
+
+    Serial.print(devStatus);
+
+    Serial.println(F(")"));
+
+   
+
+    while (1) {
+
+      delay(10);
+
+    }
+
+   
+
+  }
+
+  else{
+
+   
+
+    mpu_setup(); //SET SENSITIVITIES AND DO CALIBRATION  
+
+    Serial.println(F("Enabling DMP..."));
+
+    mpu.setDMPEnabled(true);
+
+ 
+
+    // enable Arduino interrupt detection. interrupt put just in case hidden library uses it
+
+    Serial.print(F("Enabling interrupt detection (Arduino external interrupt "));
+
+    Serial.print(digitalPinToInterrupt(mpu_interrupt));
+
+    Serial.println(F(")..."));
+
+    attachInterrupt(digitalPinToInterrupt(mpu_interrupt), dmpDataReady, RISING);
+
+    mpuIntStatus = mpu.getIntStatus();
+
+   
+
+    // set our DMP Ready flag so the main loop() function knows it's okay to use it
+
+    Serial.println(F("DMP ready! Waiting for first interrupt..."));
+
+    dmpReady = true;
+
+ 
+
+    // get expected DMP packet size for later comparison
+
+    packetSize = mpu.dmpGetFIFOPacketSize();
+
+   
+
+  }
+
+ 
+
+  /*END OF MPU+DMP SETUP*/
+
+ 
+
+  listen_command=true; //allow website to press start and send commands only after calibration
+
+ 
+
+  digitalWrite(left_step_pin, HIGH);
+
+  digitalWrite(right_step_pin, HIGH);
+
+  straighten(0,0);
+
+  Serial.println("w max");
+
+  Serial.println(w_max);
+
+  Serial.println("w min");
+
+  Serial.println(w_min);
+
+  Serial.println("v_normal");
+
+  Serial.println(v_normal);
+
+  Serial.println("v_slow");
+
+  Serial.println(v_slow);
+
+  Serial.println("yaw_rate_stat_normal");
+
+  Serial.println(yaw_rate_stat_normal*(360/(2*PI)));
+
+  Serial.println("yaw_rate_stat_slow");
+
+  Serial.println(yaw_rate_stat_slow*(360/(2*PI)));
+
+ 
+
+ 
+
+  //RIGHT DIR PIN NOT BROKEN OR LIMITED POWERED. SOFTBLOCK OCCURS
+
+  //SOFTBLOCK OCCURS FOR HuORIZONTAL MODE TOO, SO NOT CAUSED BY VERTICAL OPERATION
+
+  //FOR TEST OF TURN_MOTOR DIR PIN WRITE DO DELAY AFTER DIGITALWRITE TO SEE IF THAT WRITE SETS DIR TO ONE
+
+  //SOMETHING SOFTBLOCKS THE CODE, FIND IT
+
+  //ALSO TEST IF ! HAS TO DO ANYTHING WITH IT
+
+ 
+
+  right_step_time=micros()*0.000001;
+
+  left_step_time=micros()*0.000001;
+
+  pitch_time=micros()*0.000001;
+
+  yaw_time=micros()*0.000001;
+
+  velocity_time=micros()*0.000001;
+
+  sense_time=micros()*0.000001;
+
+  yaw_rate_pid_time=micros()*0.000001;
+
+ 
+
+ 
+
+  SerialPort.begin(115200, SERIAL_8N1, 16, 17);
+
+  WiFi.mode(WIFI_AP);
+
+  WiFi.softAP(ssid, password);
+
+  // while (WiFi.status() != WL_CONNECTED) {
+
+  //   delay(1000);
+
+  //   Serial.println("Connecting to WiFi...");
+
+  // }
+
+  Serial.println(WiFi.softAPIP());
+
+ 
+
+  ws.onEvent(onWsEvent);
+
+  server.addHandler(&ws);
+
+ 
+
+  DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
+
+  server.begin();
+
+ 
+
+  xTaskCreatePinnedToCore(
+
+        sendVideoCode, /* Function to implement the task */
+
+        "sendVideo", /* Name of the task */
+
+        10000,  /* Stack size in words */
+
+        NULL,  /* Task input parameter */
+
+        0,  /* Priority of the task */
+
+        &sendVideo,  /* Task handle. */
+
+        0); /* Core where the task should run */
+
+  xTaskCreatePinnedToCore(
+
+        senseTaskCode, /* Function to implement the task */
+
+        "senseTask", /* Name of the task */
+
+        10000,  /* Stack size in words */
+
+        NULL,  /* Task input parameter */
+
+        0,  /* Priority of the task */
+
+        &senseTask,  /* Task handle. */
+
+        0); /* Core where the task should run */
+
+ 
+
+}
+
+ 
+
+void sendVideoCode( void * parameter) {
+
+ 
+
+  String hexBuffer = "";
+
+  float timeout_time;
+
+  for(;;) {
+
+    Serial.println("video online");
+
+   
+
+    while (SerialPort.available() < 2) {
+
+//      Serial.println("camera not available");
+
+      delay(1000);
+
+      SerialPort.write(0xEE); //flag to indicate to nios that esp is ready to receive frame
+
+      delay(1);
+
+    }
+
+   
+
+    uint16_t header = SerialPort.read(); // Read the first byte and shift it to the upper byte of the header
+
+    header |= SerialPort.read() << 8; // Read the second byte and combine it with the lower byte of the header
+
+    uint32_t header4x = header * 4;
+
+    //Serial.println(header4x);
+
+ 
+
+ 
+
+    // Read the frame based on the header
+
+    while (SerialPort.available() < (header4x)) {Serial.println("wait for frame"); delay(1000); }
+
+    uint8_t buffer[header4x];
+
+    SerialPort.readBytes(buffer, header4x);
+
+ 
+
+    // Convert the buffer to a hexadecimal string
+
+    for (int i = header4x-1; i >= 0; i--) {
+
+      char hex[3];
+
+      sprintf(hex, "%02X", buffer[i]);
+
+      hexBuffer += String(hex);
+
+    }
+
+    /*IMAGE APPENDED TO FRAME, IMAGE IS THE FRAME ITSELF*/
+
+ 
+
+    timeout_time = micros()*0.000001;
+
+    while(listen_command_changing && micros()*0.000001-timeout_time<0.125*0.000001){Serial.println("wait for state change");}
+
+ 
+
+    hexBuffer+=String(listen_command);
+
+ 
+
+    /*STATE APPENDED TO FRAME*/
+
+   
+
+    timeout_time = micros()*0.000001;
+
+    while(dead_states_changing && micros()*0.000001-timeout_time<2.5*0.001){Serial.println("Dead reckoning wait for states");} //infinite loop to wait until sense_on becomes zero or timeout occurs
+
+ 
+
+ 
+
+    if(states_updated){
+
+ 
+
+      int loops=(int)(states_current.yaw-states_prev.yaw/(2*PI)); //do loops in order to get rid of any x difference that's resultant from the rover circling around itself in order to increase accuracy
+
+      float yaw_diff=(states_current.yaw-states_prev.yaw)-loops*(2*PI); //formulas work with wrapped yaws so need to wrap difference  // % CAN'T BE DONE FOR FLOAT
+
+      float x_diff=abs(states_current.x-states_prev.x); //did loop only when yaw difference is higher than 2PI. the distance spent on loop gets us nowhere so it's removed
+
+      float arc_triangle_angle=abs(yaw_diff)>=PI ? abs(yaw_diff) : 2*PI-abs(yaw_diff);
+
+      float arc_length= abs(yaw_diff)<=0.03 ? x_diff : abs(yaw_diff)*(x_diff/abs(2*PI*loops+yaw_diff)); //if yaw didn't change we don't have an arc but a straight line. ONLY GET RID OF LOOPED DIFFERENCE WHEN WE KNOW OUR TRAJECTORY IS AN ARC
+
+       
+
+      float dead_yaw=states_prev.yaw+0.5*abs(yaw_diff)*(-1+2*sgn(yaw_diff)); //add 0.5 term if yaw difference is in positive directiom
+
+      float dead_x_diff= abs(yaw_diff)<=0.05 ? arc_length : (2*arc_length*sin(0.5*arc_triangle_angle))/(arc_triangle_angle);
+
+ 
+
+      //Convert data to int with x_diff precision of 2 decimals and yaw precision of 2 decimal /*REMOVE THAT AS TRANSMISSION IS AUTOMATICALLY IN FLOAT*/
+
+      int dead_x_diff_int=(int)round(dead_x_diff*10000);
+
+      int dead_yaw_int=(int)round(dead_yaw*(360/(2*PI))*100);
+
+ 
+
+      /*BECAUSE OF USE OF PREVIOUS YAW ON MEASUREMENT OF YAW RATE, DEAD RECKONING ALGORITHM ALSO HAS TO WAIT FOR THE RECORDING OT THE PREVIOUS VALUES->THEY'RE UPDATED AT THE END ALONG WITH CURRENT VALUES*/
+
+//      states_prev.x=states_current.x; //do that after transmission
+
+//      states_prev.yaw=states_current.yaw;
+
+      states_updated = false;
+
+ 
+
+      // Create a char array to store the yaw as a string
+
+      char dead_yaw_str[5];
+
+ 
+
+      // Format the string to be 5 characters long, padding with zeros if necessary.
+
+      sprintf(dead_yaw_str, "%05d", dead_yaw_int);
+
+ 
+
+      // Append the formatted string to hexBuffer
+
+      hexBuffer += dead_yaw_str;
+
+ 
+
+      // Create a char array to store the displacement as a string
+
+      char dead_x_diff_str[5];
+
+ 
+
+      // Format the string to be 5 characters long, padding with zeros if necessary.
+
+      sprintf(dead_x_diff_str, "%05d", dead_x_diff_int);
+
+ 
+
+      // Append the formatted string to hexBuffer
+
+      hexBuffer += dead_x_diff_str;
+
+     
+
+    }
+
+ 
+
+    else{
+
+ 
+
+      //TRANSMIT WITH APPENDING ZEROES
+
+ 
+
+      hexBuffer += "0000000000";
+
+     
+
+    }
+
+ 
+
+    ws.textAll(hexBuffer);
+
+    hexBuffer = "";
+
+ 
+
+ 
+
+  }
+
+}
+
+ 
+
+void senseTaskCode( void * parameter) {
+
+   for(;;) {
+
+    /*
+
+    float current_time=micros()*0.000001;
+
+    float current_right_half_period=right_step_period*(1-!(abs(w_right)<w_min/2.2)*(duty_cycle-(2*duty_cycle-1)*right_state));    //right_step_period*(1-duty_cycle+right_state*(-1+2*duty_cycle))*!(abs(w_right)<w_min/2.2);
+
+    float current_left_half_period=left_step_period*(1-!(abs(w_left)<w_min/2.2)*(duty_cycle-(2*duty_cycle-1)*left_state));  //left_step_period*(1-duty_cycle+left_state*(-1+2*duty_cycle))*!(abs(w_left)<w_min/2.2);
+
+    bool fastest_right=abs(w_right)>=abs(w_left);
+
+    float current_half_period = fastest_right ? current_right_half_period : current_left_half_period;
+
+    float current_step_time= fastest_right ? right_step_time : left_step_time;
+
+ 
+
+    current_half_period-(current_time-current_step_time)>=sense_runtime*0.9  &&
+
+ 
+
+    MOTORS CAN WORK INDIVIDUALLY BUT NOT TOGETHER. MAYBE DUE TO OFFSETS, FIX IT IF PROBLEM IN MULTITHREAD TOO   micros()*0.000001-sense_time>=max_sense_period
+
+   
+
+    */
+
+    if(true){ //ensure sensed values are accurately tracked while not adding significant delay to motor times
+
+ 
+
+      sense(); //too much sensor calls could distort the slow wave if w_turn exists. Need to limit sensor calls so slow period has less chance of getting distorted PHASE SHIFT???
+
+      //Called to keep pitches and yaws up to date until desired w is updated. Rover is blind during w acceleration.
+
+   
+
+    }
+
+ 
+
+   }
+
+}
+
+ 
+
+bool toggle=false;
+
+bool debug_state=false;
+
+ 
+
+ 
+
+void loop() {
+
+ 
+
+  /*
+
+   * TO DO:
+
+   * COMMAND SEQUENCE
+
+   * ENSURE STRAIGHTEN CONTROLLER IS GOOD
+
+   * FIX OPERATION SCHEDULER
+
+   *
+
+   */
+
+  
+
+    
+
+  /*
+
+   * 
+
+   *  States: 0:BUSY, 1:LISTEN TO LAPTOP (laptop takes over when it sends stop and communicates with rover during crash)
+
+   * 
+
+   *  -Get sensor reading and update control (more delay between updating more unstable response is)
+
+   *  -1: Check for STOP(). If there's none continue move operation 0:Check for Move(). If there's none only do what the laptop commands tell you to do (not allow it to send commands until ready, send working when doing command)
+
+   *  -0: Listen to get requests then do the corresponding get request. 1: do the path straighten algorithms. Do crash if see interrupt (interrupt should only work when not listening to laptop)
+
+   *  -Update the controller inputs based on responses during command running
+
+   * 
+
+   *  On seperate core
+
+   *  -A switch to turn on data collecting?
+
+   *  -Get complete FPGA image processor data to UART pin
+
+   *  -Transmit processed data to laptop along with v and yaw (if update() is running then wait until it's done)
+
+   * 
+
+   * 
+
+   *  ROVER WILL GET MOVE, TURN, CENTER?, AND STOP COMMANDS FROM LAPTOP. ALGORITHMS MENTIONED IS WHAT LAPTOP WILL DO
+
+   *  NATIVELY ROVER WILL DO STRAIGHTEN AND CRASHFIX
+
+   * 
+
+   * 
+
+   * 
+
+   */
+
+ 
+
+   /*
+
+    * Can change desired state value mid-evolution. But should wait for controller to stabilize the input so that rover operation isn't compromized (eg. rover should not attempt to find path before it's finished with its stop())
+
+    */
+
+ 
+
+   //State will automatically be switched listen after sending a crash fix request to laptop
+
+ 
+
+   //State will be switched after operation is complete and rover will send a done message to laptop, which in response will send in the next command.
+
+   
+
+ 
+
+float drift_time=micros()*0.000001;
+
+ 
+
+    /*START OF COMMAND LISTENER AND EXECUTIONER*/
+
+   
+
+    if(listen_command){
+
+      //set the inputs of controllers based on input
+
+ 
+
+      //NOW LISTENING TO COMMANDS FROM COMPUTER. ALGORITHMS LIKE BACKTRACK AND CRASH_FIXING INSIDE LAPTOP WILL BE IMPLEMENTED BY THE INPUT SETTINGS BY THE LAPTOP
+
+ 
+
+      //Listen to Set_v Set_x Set_yaw and Set_yaw_rate commands from laptop. Other commands like move(), and pathfinder() are subtasks of that.
+
+ 
+
+      /*
+
+       *
+
+       *
+
+       *
+
+       */
+
+ 
+
+      /*
+
+       * listen to network
+
+       * check if network receiver buffer is full
+
+       *
+
+       * 0:END, 1:SET_V, 2:SET_X, 3:SET_YAW_RATE, 4:SET_YAW (ELSE CAN DO DEFAULT END AND HAVE UNTIL 0-3
+
+       *
+
+       *
+
+       * //STRAIGHTEN WILL BE ON WEBSOCKET. OTHER WILL BE ON HTTP HANDSHAKE OR MUTEX (only accept the values in response to the message id)
+
+       *
+
+       * if full{
+
+       *
+
+       *
+
+       *
+
+       * WON'T BE AN OPERATION ANYMORE BUT A WEBSOCKET STREAM THAT WE USE TO READ DATA. CALL STRAIGHTEN WHENEVER WE GET NEW INPUTS
+
+       * OPERATION FOR HTTPS OF move_forward(vanish, move){
+
+      *
+
+       * set_velocity(move*v_normal);
+
+       * straighten(vanish); //implement blocks or updates per second if rate of change of vanish is high!!!!
+
+       * //don't set listen_command to zero as we're still open to vanishing point inputs and other commands
+
+       * control_v=true;
+
+       * control_yaw_rate=false;
+
+       *
+
+       * //NEW COMMANDS WILL OVERRIDE THE SET YAW RATE COMMAND TO STOP CARRYOVER OF THE FORWARD'S YAWRATE????
+
+       *
+
+       * }
+
+       *
+
+       * OPERATION FOR HTTPS OF backtrack(){
+
+       * /*stop, turn 180 degrees, return movement at normal speed
+
+       *
+
+       * operations[0]={3, 0};
+
+       * operations[1]={1, 0};
+
+       * operations[2]={4, 180};
+
+       * operations[3]={1, v_normal};
+
+       *
+
+       * state_changing=true; //implement state changes when you have multiple operations or blocking operations
+
+       * toggle_state();
+
+       * state_changing=false;
+
+       *
+
+       * }
+
+       *
+
+       * OPERATION FOR HTTPS OF stop(){
+
+       * /*set v to zero, done when stable
+
+       *
+
+       * operations[0]={3, 0};
+
+       * operations[1]={1, 0};
+
+       * operations[2]={0, 0};
+
+       * operations[3]={0, 0};
+
+       * state_changing=true;
+
+       * toggle_state();
+
+       * state_changing=false;
+
+       *
+
+       *
+
+       * }
+
+       *
+
+       *
+
+       * NOT DONE ANYMORE. OUTSOURCED BY TURNFORWARD
+
+       * OPERATION FOR HTTPS OF path_select(){ //Slowly turn to left until laptop gives moveForward command
+
+       * /*slow to 0.25 or 0th of normal speed, use vanish broadcast/request amount of turn from laptop to center rover on path, set normal speed after done
+
+       *
+
+       * operations[0]={1, v_slow};
+
+       * operations[1]={3, -yaw_rate_slow};
+
+       * operations[2]={0, 0};
+
+       * operations[3]={0, 0};
+
+       * state_changing=true;
+
+       * toggle_state();
+
+       * state_changing=false;
+
+       *
+
+       * }
+
+       *
+
+       * NOT DONE ANYMORE OUTSOURCED BY TURNFORWARD
+
+       *
+
+       *
+
+       * OPERATION FOR HTTPS OF beacon_sweep(){ //Wıll turn 360 degrees around itself while laptop uses the images sent to find position from beacons
+
+       * //Maybe also wait for new yaw data if we do yaw detection??
+
+       *
+
+       *
+
+       * operations[0]={1, 0}; //CHANGE TO ALLOW 360 DEGREE TURN IF TOO STEPWISE
+
+       * operations[1]={3, 0};
+
+       * operations[2]={4, yaw+180}; //somehow limit turn speed if yaw demands too high turn speed
+
+       * operations[2]={4, yaw+180};
+
+       *
+
+       * state_changing=true;
+
+       * toggle_state();
+
+       * state_changing=false;
+
+       *
+
+       * STILL IMPLEMNT DEAD RECKONING. Use it when not at node if at node use beacons as dead reckoning
+
+       *
+
+       * }
+
+       *
+
+       *
+
+       *
+
+       * //MIGHT NOT HAVE THAT ONE AS CALIBRATION COULD ONLY BE ADDING AN OFFSET TO THE PITCH MEASUREMENT TO ACCOUNT THE SLANT OF CHASSIS
+
+       *
+
+       * ???????? AIM IS TO COUNTER COM OFFSET AND DRIFT EFFECTS????????
+
+       * OPERATION FOR HTTPS OF calibrate_pitch{ //For calibrate_pitch() IS A SPECIAL CASE AS IT DOESN'T TOGGLE STATE AS IT'S INSTANTENIOUS (CURRENTLY, WILL MAYBE CHANGE STATE IF DOING COMMAND WOULD TAKE TIME)
+
+       *
+
+       * calibrate_pitch(); //blocking operation, not done until see no gyro (call set v to zero, if detect overall x displacement move offset to other direction and set v again, repeat until got it)
+
+       * control_v=true;
+
+       * control_yaw_rate=true;
+
+       *
+
+       * }
+
+       *
+
+       *
+
+       * OPERATION FOR HTTPS OF calibrate_yaw{
+
+       *
+
+       *
+
+       *       MAPPING STILL ACCURATE SO NOT PROBABLY NEED IT
+
+       *
+
+       * }
+
+       *
+
+       * } //END OF if(full)
+
+       *
+
+       * start_operation=true;
+
+       * i=0;
+
+       *
+
+       *
+
+       *
+
+       *
+
+       *
+
+       *
+
+       *
+
+       * NOT 100% COMPLETE, WILL UPDATE BASED ON HOW VANISHING_POINT IS SENT
+
+       *
+
+       * Current list of operations:
+
+       * -stop() HTTPS (stop)
+
+       * -beaconSweep() HTTPS (360 sweep of beacons to calibrate position (and yaw?)
+
+       * -backtrack() HTPPS (turn back)
+
+       * -moveForward() WS (will call straighten(vanish, bool) whenver receive new value (does the job of both straighten and path selection)
+
+       * -crash() ???????
+
+       *
+
+       *
+
+       * Current list of operations:  
+
+       *
+
+       * *
+
+       * -moveForward() //UPDATE CONTROL_YAW_RATE ACCORDINGLY
+
+       * -backtrack
+
+       * -
+
+       *
+
+       * JUST SENDING ANGULAR AND LINEAR VELOCITY
+
+       *
+
+       *
+
+       */
+
+ 
+
+    }
+
+ 
+
+    //vanishing point got by fpga in corridor and not got at corner (after switch off set vanishing point to zero)
+
+ 
+
+    else{ //IF RECEIVED A COMMAND and currently executing its operations. SHOULD ONLY ENTER WHEN DOING A COMMAND
+
+ 
+
+ 
+
+      if(start_operation){ //if need to load a new operation
+
+ 
+
+        if(i==4){
+
+ 
+
+          control_v=true;
+
+          control_yaw_rate=true;
+
+          listen_command_changing=true;
+
+          toggle_state();
+
+          listen_command_changing=false;
+
+         
+
+        }
+
+         
+
+ 
+
+        else{ //coperation executor
+
+         
+
+          switch(operations[i].id){
+
+ 
+
+            case 0: //END
+
+ 
+
+              control_v=true;
+
+              control_yaw_rate=true;
+
+              listen_command_changing=true; //not needed
+
+              toggle_state();
+
+              listen_command_changing=false;
+
+         
+
+            break;
+
+           
+
+            case 1: //set_v
+
+ 
+
+              control_v=true;
+
+              control_yaw_rate=true;
+
+              set_yaw_rate(0);
+
+              output=&states_current.v;
+
+              past_output=*output;
+
+              set_velocity(operations[i].input);
+
+         
+
+            break;
+
+            
+
+            case 2: //set_x DON'T UPDATE X ATM, CHANGE BASED ON FINAL OPERATION
+
+ 
+
+              control_v=false;
+
+              control_yaw_rate=true;
+
+              output=&states_current.x;
+
+              past_output=*output;
+
+              set_distance(operations[i].input);
+
+           
+
+            break;
+
+           
+
+            case 3: //set_yaw_rate
+
+ 
+
+              control_v=true;
+
+              control_yaw_rate=true;
+
+              set_velocity(v_desired); //v remains as it is while yaw rate is controlled
+
+              output=&states_current.yaw_rate;
+
+              past_output=*output;
+
+              set_yaw_rate(operations[i].input);
+
+           
+
+            break;
+
+           
+
+            case 4: //set_yaw
+
+ 
+
+              control_v=true;
+
+              control_yaw_rate=false;
+
+              set_velocity(v_desired); //v remains as it is while yaw is controlled
+
+              output=&states_current.yaw;
+
+              past_output=*output;
+
+              set_yaw(operations[i].input);
+
+         
+
+            break;
+
+           
+
+            default: //if command not valid do nothing and wait for new command
+
+              control_v=true;
+
+              control_yaw_rate=true;
+
+              listen_command_changing=true;
+
+              toggle_state();
+
+              listen_command_changing=false;
+
+              //TRANSMIT INVALID COMMAND ERROR TO LAPTOP?
+
+         
+
+            break;
+
+ 
+
+         
+
+          } //switch end
+
+ 
+
+        }
+
+        start_operation=false;
+
+       
+
+      } //start command end
+
+ 
+
+      else{
+
+ 
+
+        //Send complete and change state when close to input and stable (output close to steady state value and doesn't vary much)
+
+      //Also switch to the use of v and yaw rate controllers since these controllers would be the ones used during listening mode (while doing straighten) (Might switch to yaw instead of yaw rate controller in final design?)
+
+        if(abs(*output-operations[i].input)<0.7 && (*output-past_output)<0.7){  //WILL CHANGE MARGINS BSED ON MPU TEST ACCURACY
+
+ 
+
+          i++;
+
+          start_operation=true;
+
+       
+
+          control_v=true;
+
+          control_yaw_rate=true;
+
+          //Laptop will see that command is done when it receives the rover's changed state along with the image data
+
+       
+
+        }
+
+ 
+
+      //Change state and keep updating the controller variable.
+
+      past_output=*output;
+
+ 
+
+      //The else block didn't listen to commands, so the busy state is completely deaf to laptop commands
+
+       
+
+      }
+
+ 
+
+     
+
+ 
+
+    }
+
+ 
+
+    /*END OF COMMAND LISTENER AND EXECUTIONER*/
+
+ 
+
+    //update corresponding controlled variable (free mode only update velocity and yaw, busy mode update input parameters)
+
+ 
+
+    /*SENSE DONE BY SENSETASK THREAD*/
+
+    //CHECK IF THERE'S STILL BLOCKING WITH THE NEW IF STATEMENT. IF THERE IS THEN THERE'S STILL BLOCKING DONE
+
+    //CHECK IF CALLING MICROS-SENSE_TIME CONTINUOULY BLOCKS THE SCHEDULER (SINCE THERE'S NO VTASKDELAY WE JUST KEEP RUNNING IF SINCE IT'S FAST TO DO
+
+    //IF THERE IS, CAN USE VTASKDELAY INSTEAD OF BLINK WITHOUT DELAY TO LIMIT AMOUNT OF CALLS
+
+    //Checking right now if freertos can do blink without delay without vtaskdelay. ADD VTASKDELAY IF NOT (VTASKDELAY DOES BLINK WITHOUT DELAY AUTOMATICALLY)
+
+ 
+
+    /*START OF MOTOR*/ //will make use of the global variable cycles to keep track of toggling. ASSIGN MOTOR
+
+    if( cycles<=0 && ( left_state && right_state ) ){ //this is where the desired controllers would be run when we're done with w acceleration
+
+ 
+
+      //Serial.println("updating velocity");
+
+      debug_state=!debug_state;
+
+      digitalWrite(debug, debug_state);
+
+      right_state=true;
+
+      left_state=true; //also needed to recalibrate the state of the clocks too
+
+      digitalWrite(left_step_pin, HIGH);  //set to high to prevent significant distortion
+
+      digitalWrite(right_step_pin, HIGH); //reset both signals to 0 phase to ensure any phase shifts done on the slow signal due to delays isn't carried over.
+
+ 
+
+      //right_slowest = right_step_period >= left_step_period;
+
+     
+
+      
+
+ 
+
+ 
+
+      /*NEED TO RESET MOTOR TIMERS AFTER W CHANGE TO ENSURE THERE'S NO PHASE SHIFT BUILDUP. WILL CALIBRATE BOTH CYCLES AT START YET UNALIGNMENT COULD STILL OCCUR IN SLOWER PERIOD. MAX OFFSET TO SPEED IS DECREASE OF PERIOD BY HALF THE SLOWEST PERIOD*/
+
+      /*Can reduce effect of false step by increasing steady cycles but WILL INCREASE OVERALL DELAY MUCH. CAN DO ALIGNMENT BUT VERY UNLIKELY AND WORST CASE DOUBLES FAST'S PERIOD BY 1.5 FOR ONE CYCLE*/
+
+      /* SLOW SPEEDS ARE MORE DISCRETE SO JUST INCREASE STEADY CYCLES TO GET RID OF ERROR*/
+
+      /*But problem for slow turns at high speeds. RIGHT NOW DON'T FIX AND JUST INCREASE STEADY CYCLES IF ISSUE*/
+
+      /*FOR SLOW ONE, ALSE RECORD THE MISALIGNMENT AND REMOVE IT FROM NEXT PERIOD*/
+
+      //reset timers, reset states, remove time shift of slowest at first cycle, start shift only when both states are high (shift is already removed)
+
+ 
+
+      /*ADD STOP WHEN FALL OVER: IF PITCH IS LARGER THAN A CERTAIN VALUE DON'T FOLLOW SENT MOTOR SIGNAL AND SET DIGITAL PINS TO HIGH. MAKE SURE TO CALIBRATE CLOCKS WHEN GOT OUT*/
+
+      /*DO STOP PRORCTION AT THE MOMENT YOU CALIBRATE THE CLOCKS*/
+
+      /*UPGRADE TO 16 MICROSTEP*/
+
+ 
+
+      /*Mısalignment cause error worse in fast step so keep distortion to low one AND JUST INCREASE STEADY CYCLES TO FIX*/ //TORQUE ALSO NEEDED FOR GOOD ACCELERATION AND ALREADY AT CURRENT LIMITS. REDUCE TO 8 STEP IF CAN'T ACCELERATE
+
+     
+
+      if(!is_vertical){
+
+ 
+
+        float v_max=wheel_radius*w_max;
+
+        float yaw_rate_stat_max=v_max/(rover_width*0.5);  
+
+        set_velocity(0);
+
+        set_yaw_rate(toggle ? (w_max)*(wheel_radius/(rover_width*0.5)) : (-w_max)*(wheel_radius/(rover_width*0.5))); //yaw_rate_stat_slow
+
+        toggle=!toggle;
+
+ 
+
+ 
+
+        //Can do linear movement and moving turn (any direction), can do - direction stationary turn turn but for some reason + stationary turn left motor stops DESPITE SIGNALS CORRECT AND MOTORS WORKING INDIVIDUALLY
+
+        //LEFT MOTOR CAN GO TO NEGATIVE DIRECTIONS. SO WHY PROBLEM ONLY FOR STATIONARY RIGHT TURN???? NO CODE ERROR SIGNALS ARE CORRECT. LOWERED TORQUE AND SAW THE SAME PROBLEM STILL
+
+        //SAME SIGNALS AND CURRENT RATING BUT ONE MOTOR IS FASTER
+
+        //do left turn no problem when dir pins aren't present
+
+ 
+
+        /*forward/back: OK BUT EITH FASTER LEFT STEP PIN: FIND OUT WHY AND FIX TIMING: GIVE COMPENSATION TO RIGHT
+
+         * turn left stat:
+
+         *
+
+         *
+
+         *
+
+         * NO DIRECTION DEPENDENT SPEED CHANGE
+
+         *
+
+         * FOR FORWARD MOTION SPEEDS ARE SAME BUT FOR TURNS LEFT HAS MORE SPEED THAN RIGHT?
+
+         * LEFT MOTOR STARTS TO STALL
+
+         *
+
+         *
+
+         * PROBLEM WAS DUE TO UNSHARED GROUND. ESP HAD LAPTOP GROUND WHILE MOTORS HAD BATTERY GROUND. TOUCH CABLES TOGETHER TO SHARE GROUNDS
+
+         */
+
+       
+
+        
+
+      }
+
+     
+
+  
+
+  
+
+      //control_v ? update_velocity() : update_distance();
+
+      //control_yaw_rate ? update_yaw_rate() : update_yaw(); //run the control loop and get the new motor w's, cap them, then set the new step periods and toggle accordingly
+
+      /*YAW CONTROL MESSES UP W MEASUREMENT. FIX IT!!!! MAYBE BECAUSE WE DIDN'T COVERT CORRECTLY*/
+
+ 
+
+      //IMPLEMENT NEW CONTROL FLAGS THAT WORK WITH VELOCITY+YAW_RATE SETTING
+
+ 
+
+      update_velocity_yaw_rate();
+
+      //update_velocity_yaw_rate();
+
+      //Set time shift at cycles<=0 routime, which only runs before next cycle. The nonzero cycle is set zero at the end of one half cycle so don't worry about it beaing an offset
+
+      //time_shift=micros()*0.000001-(right_slowest ? right_step_time : left_step_time); //will remove the time offset of largest step (one that wasn't calibrated for) from its next period
+
+      float current_time=micros()*0.000001;
+
+      right_time_shift=current_time-right_step_time; //420*0.000001 ADDED TO START DUE TO SERIAL
+
+      left_time_shift=current_time-left_step_time;
+
+ 
+
+ 
+
+      //If delay too high, we can't have steps with short periods->can cause jitter and speed reduction
+
+ 
+
+      //Serial.println("velocity updated");
+
+      //toggle_time=micros()*0.000001;
+
+ 
+
+   
+
+    } //RIGHT STEP PIN PROBLEM
+
+ 
+
+ 
+
+    turn_motor();
+
+ 
+
+ 
+
+    /*END OF MOTOR*/
+
+  
+
+ 
+
+}
