@@ -1,0 +1,99 @@
+#include <Arduino.h>
+#include <ESPAsyncWebServer.h>
+#include <WiFi.h>
+#include <HardwareSerial.h>
+
+
+const char* ssid = "esp32aptestrle";
+const char* password = "wasdqwerty32";
+
+AsyncWebServer server(80);
+AsyncWebSocket ws("/ws");  
+
+HardwareSerial SerialPort(2);
+
+TaskHandle_t sendVideo;
+
+void onWsEvent(AsyncWebSocket * server, AsyncWebSocketClient * client, AwsEventType type, void * arg, uint8_t *data, size_t len){
+  if(type == WS_EVT_CONNECT){
+    Serial.printf("WebSocket client #%u connected from %s\n", client->id(), client->remoteIP().toString().c_str());
+  } else if(type == WS_EVT_DISCONNECT){
+    Serial.printf("WebSocket client #%u disconnected\n", client->id());
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  SerialPort.begin(500000, SERIAL_8N1, 16, 17);
+  WiFi.mode(WIFI_AP);
+  WiFi.softAP(ssid, password);
+  // while (WiFi.status() != WL_CONNECTED) {
+  //   delay(1000);
+  //   Serial.println("Connecting to WiFi...");
+  // }
+  Serial.println(WiFi.softAPIP());
+
+  ws.onEvent(onWsEvent);
+  server.addHandler(&ws);
+]
+
+  DefaultHeaders::Instance().addHeader("Access-Control-Allow-Origin", "*");
+  server.begin();
+  
+  xTaskCreatePinnedToCore(
+        sendVideoCode, /* Function to implement the task */
+        "sendVideo", /* Name of the task */
+        10000,  /* Stack size in words */
+        NULL,  /* Task input parameter */
+        0,  /* Priority of the task */
+        &sendVideo,  /* Task handle. */
+        0); /* Core where the task should run */
+}
+
+void sendVideoCode( void * parameter) {
+  String hexBuffer = "";
+  uint16_t delayCount = 0;
+
+  for(;;) {
+    while (SerialPort.available() < 2) { 
+      SerialPort.write(0xEE); //flag to indicate to nios that esp is ready to receive frame
+      delay(1);
+      ++delayCount; 
+      if (delayCount == 350){
+        ws.textAll("80000001");
+        delayCount = 0;
+      }  
+    }
+    uint16_t header = SerialPort.read(); // Read the first byte 
+    header |= SerialPort.read() << 8; // Read the second byte and left shift by 8 bits to maintain data accuracy since UART writes LSB first
+    uint32_t header4x = header * 4;
+    //Serial.println(header4x);
+    
+    while (SerialPort.available() < (header4x)) {}
+
+    uint8_t* buffer = new uint8_t[header4x];
+
+    SerialPort.readBytes(buffer, header4x);
+
+    for (int i = header4x-1; i >= 0; i--) {
+      char hex[3];
+      sprintf(hex, "%02X", buffer[i]);
+      hexBuffer += String(hex);
+    }
+
+    ws.textAll(hexBuffer);
+    delayCount = 0;
+    hexBuffer = "";
+    delete[] buffer;
+    ws.cleanupClients();
+  }
+}
+
+
+
+
+void loop() {
+  delay(10);
+
+
+}
